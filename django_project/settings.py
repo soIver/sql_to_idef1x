@@ -84,7 +84,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = '/collections/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'myapp/collections/static')
+STATIC_ROOT = os.path.join(BASE_DIR, 'mainapp/collections/static')
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'myapp/static'), os.path.join(BASE_DIR, 'react_apps/build/static')]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

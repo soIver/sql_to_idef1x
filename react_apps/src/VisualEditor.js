@@ -5,7 +5,7 @@ function VisualEditor() {
     const [xml, setXml] = useState('');
 
     useEffect(() => {
-        fetch('static/example.drawio')
+        fetch('collections/static/example.drawio')
             .then((response) => response.text())
             .then((data) => setXml(data))
             .catch((error) => console.error('Error loading diagram:', error));
