@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    {% load static %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>Convertools</title>
+</head>
+<body>
+    <input type="hidden" id="csrf_token" value="{{ csrf_token }}">
+    <header class="header">
+        <a href="/" class="logo">
+            <img src="{% static 'img/logo.png' %}" alt="Logo">
+        </a>
+        <p class="name">Convertools</p>
+        <div class="profi">
+            <button class="profile" id="logoutBtn" title="Выйти">
+                <img src="{% static 'img/logout.png' %}" alt="Logout">
+            </button>
+            <button class="profile" id="Profile">
+                <img src="{% static 'img/profile.png' %}" alt="Profile">
+            </button>
+        </div>
+    </header>
+
+    <div class="code-editor-wrapper">
+        <div class="tabs-container">
+            <div class="project-tabs" id="projectTabs"></div>
+            <button class="add-project" id="addProject">+</button>
+        </div>
+        <div class="code-editor">
+            <div id="sql-editor" class="codeedit"></div>
+        </div>
+    </div>
+
+    <div class="visual-editor">
+        <div id="visual"></div>
+    </div>
+
+    <!-- модальные окна -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-left">
+                <div class="slider-container" id="slider-container">
+                    <img src="{% static 'img/img1.png' %}" alt="Slide 1" class="slider-image active">
+                    <img src="{% static 'img/img2.png' %}" alt="Slide 2" class="slider-image">
+                </div>
+                <div class="modal-line"></div>
+            </div>
+            <div class="modal-right">
+                <img src="{% static 'img/close.png' %}" alt="Close" id="closeModalBtn" class="close">
+                <h2>Вход</h2>
+                <form id="loginForm" method="post" action="{% url 'login' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+                    <label for="email">Почта</label>
+                    <input type="email" id="email" name="email" required>
+                    <label for="password">Пароль</label>
+                    <input type="password" id="password" name="password" required>
+                    <button type="submit">Войти</button>
+                </form>
+                <p class="register-text">У вас ещё нет аккаунта? <a href="#" id="registerLink">Зарегистрироваться</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="registerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-left">
+                <div class="slider-container" id="register-slider-container">
+                    <img src="{% static 'img/img1.png' %}" alt="Slide 1" class="slider-image active">
+                    <img src="{% static 'img/img2.png' %}" alt="Slide 2" class="slider-image">
+                </div>
+                <div class="modal-line"></div>
+            </div>
+            <div class="modal-right">
+                <img src="{% static 'img/close.png' %}" alt="Close" id="closeRegisterModalBtn" class="close">
+                <h3>Регистрация</h3>
+                <form id="registerForm" method="post" action="{% url 'register' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+                    <label for="register-email">Почта</label>
+                    <input type="email" id="register-email" name="email" required>
+                    <label for="register-password">Пароль</label>
+                    <input type="password" id="register-password" name="password" required>
+                    <label for="confirm-password">Подтверждение пароля</label>
+                    <input type="password" id="confirm-password" name="confirm-password" required>
+                    <button type="submit">Зарегистрироваться</button>
+                </form>
+                <p class="login-text">У вас уже есть аккаунт? <a href="#" id="loginLink">Войти</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/lodash@4.17.21/lodash.min.js"></script>
+
+    <!--редакторы (не работает визуализатор нихуя не знаю) -->
+    <script src="https://unpkg.com/monaco-editor@0.33.0/min/vs/loader.js"></script>
+    <script src="https://unpkg.com/react-drawio@1.0.0/dist/react-drawio.min.js"></script>
+
+    <script src="{% static 'js/components/VisualEditor.js' %}"></script>
+
+    <!-- 4. Основная логика (первый скрипт обработка) -->
+    <script src="{% static 'js/sql-to-drawio.js' %}"></script>
+
+    <!-- 5. скрипты бизнес-логики -->
+    <script src="{% static 'js/scripts.js' %}"></script>
+</body>
+</html>

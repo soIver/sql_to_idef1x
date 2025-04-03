@@ -1,0 +1,49 @@
+[entity]
+baseStyle = "swimlane"
+width = 140
+height = 80
+childLayout = "stackLayout"
+startSize = 30
+horizontalStack = 0
+horizontal = 1
+resizeParent = 1
+resizeParentMax = 0
+resizeLast = 0
+collapsible = 0
+marginButtom = 0
+whiteSpace = "wrap"
+align = "left"
+strokeWidth = 2
+fontStyle = 1
+html = 1
+
+[entity_column]
+baseStyle = "text"
+width = 140
+height = 30
+strokeColor = "none"
+fillColor = "none"
+verticalAlign = "middle"
+spacingLeft = 4
+spacingRight = 4
+overflow = "hidden"
+points = "[[0,0.5],[1,0.5]]"
+portConstraint = "eastwest"
+rotatable = 0
+whiteSpace = "wrap"
+fontStyle = 1
+html = 1
+
+[default]
+baseStyle = ""
+html = 1
+white_space = "wrap"
+
+[text]
+inherit = "default"
+fontSize = 14
+fontStyle = 1
+align = "left"
+width = 60
+height = 20
+baseStyle = "text"
