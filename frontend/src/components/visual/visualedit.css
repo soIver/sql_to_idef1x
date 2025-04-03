@@ -1,0 +1,60 @@
+.visual-editor {
+    width: 100%;
+    height: 30rem;
+    border: 0.125rem solid #ffffff;
+    border-radius: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.visual-editor-content {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 180rem) {
+    .visual-editor {
+        height: 60rem;
+    }
+}
+
+@media (max-width: 160rem) {
+    .visual-editor {
+        height: 55rem;
+    }
+}
+
+@media (max-width: 120rem) {
+    .visual-editor {
+        height: 35rem;
+    }
+}
+
+@media (max-width: 100rem) {
+    .visual-editor {
+        height: 30rem;
+    }
+}
+
+@media (max-width: 80rem) {
+    .visual-editor {
+        height: 25rem;
+    }
+}
+
+@media (max-width: 64rem) {
+    .visual-editor {
+        height: 20rem;
+    }
+}
+
+@media (max-width: 48rem) {
+    .visual-editor {
+        height: 18.75rem;
+    }
+}

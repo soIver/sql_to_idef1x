@@ -1,0 +1,95 @@
+.projects-tabs {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+    scroll-behavior: smooth;
+    border-top-left-radius: 25px;
+    border-top-right-radius: 25px;
+    width: 100%;
+}
+
+.projects-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.project-tab {
+    padding: 0 15px;
+    display: flex;
+    align-items: center;
+    border-right: 1px solid #e0e0e0;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    background: #ffffff;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.project-tab.active {
+    background: #e0e0e0;
+    color: #000000;
+}
+
+.project-tab:hover {
+    background: #f0f0f0;
+}
+
+.close-tab {
+    margin-left: 8px;
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 0;
+    font-size: 14px;
+}
+
+.close-tab:hover {
+    color: #000;
+}
+
+.add-project-btn {
+    background: #ffffff;
+    color: #000000;
+    border: none;
+    padding: 0 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    border-top-right-radius: 25px;
+}
+
+.add-project-btn:hover {
+    background: #f0f0f0;
+}
+
+.scroll-arrow {
+    top: 0;
+    height: 100%;
+    width: 30px;
+    border: none;
+    cursor: pointer;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    background-color: #ffffff00;
+    color: #ffffff;
+}
+
+.left-arrow {
+    left: -10px;
+}
+
+.right-arrow {
+    right: -10px;
+    border-top-left-radius: 25px;
+}
+
+.scroll-arrow:focus {
+    outline: none;
+    box-shadow: none;
+}
