@@ -6,77 +6,133 @@ from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from django.views.decorators.http import require_http_methods
 
-# myapp/views.py
 from django_project.json2drawio import Visualizer
 from django_project.sql2json import sql_to_json_data
 from .models import User, Project
 
+from rest_framework import status
+from django.middleware.csrf import get_token
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .serializers import UserSerializer
+
+import json, logging
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+
+@api_view(['POST'])
+@ensure_csrf_cookie
+def register_user(request):
+    try:
+        data = request.data
+        email = data.get('email')
+        password = data.get('password')
+        password2 = data.get('password2')
+
+        if not all([email, password, password2]):
+            return Response(
+                {'error': 'Пожалуйста, заполните все поля'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if password != password2:
+            return Response(
+                {'error': 'Пароли не совпадают'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if User.objects.filter(email=email).exists():
+            return Response(
+                {'error': 'Пользователь с таким email уже существует'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = User.objects.create_user(email=email, password=password)
+        
+        login(request, user)
+
+        return Response({
+            'message': 'Регистрация успешна',
+            'email': user.email
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        print('Ошибка при регистрации:', str(e))
+        return Response(
+            {'error': 'Произошла ошибка при регистрации'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+@api_view(['POST'])
+@ensure_csrf_cookie
+def login_user(request):
+    try:
+        data = request.data
+        email = data.get('email')
+        password = data.get('password')
+
+        if not all([email, password]):
+            return Response(
+                {'error': 'Пожалуйста, заполните все поля'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = authenticate(request, email=email, password=password)
+        
+        if user is not None:
+            login(request, user)
+            return Response({
+                'message': 'Вход выполнен успешно',
+                'email': user.email
+            })
+        else:
+            return Response(
+                {'error': 'Неверный email или пароль'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    except Exception as e:
+        print('Ошибка при входе:', str(e))
+        return Response(
+            {'error': 'Произошла ошибка при входе'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+@api_view(['GET'])
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    return Response({'csrfToken': get_token(request)})
+
+@api_view(['GET'])
+def check_auth(request):
+    if request.user.is_authenticated:
+        return Response({
+            'is_authenticated': True,
+            'email': request.user.email
+        })
+    return Response({
+        'is_authenticated': False
+    })
 
 @ensure_csrf_cookie
 def index(request):
-    with open('react_apps/build/asset-manifest.json', 'r') as f:
-        manifest = json.load(f)
-    main_js_path = f'/collections{manifest["files"]["main.js"]}'
-    return render(request, 'myapp/index.html', {'main_js_path': main_js_path})
+    return render(request, 'myapp/index.html')
 
-@csrf_protect
-def login_view(request):
-    if request.method == 'POST':
-        email = request.POST.get('email')
-        password = request.POST.get('password')
-        user = authenticate(request, username=email, password=password)
-
-        if user is not None:
-            login(request, user)
-            return JsonResponse({'status': 'success', 'redirect_url': '/'})
-        else:
-            # Возвращаем ошибку без редиректа
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Неверные учетные данные'
-            }, status=400)
-
-    return JsonResponse({'status': 'error', 'message': 'Метод не разрешен'}, status=405)
-
-@ensure_csrf_cookie
-def register_view(request):
-    if request.method == 'POST':
-        if not request.is_ajax():
-            return HttpResponseBadRequest()
-        email = request.POST.get('email')
-        password = request.POST.get('password')
-        confirm_password = request.POST.get('confirm-password')
-
-        if password != confirm_password:
-            return JsonResponse({'status': 'error', 'message': 'Пароли не совпадают'})
-
-        if User.objects.filter(email=email).exists():
-            return JsonResponse({'status': 'error', 'message': 'Пользователь с такой электронной почтой уже существует'})
-
-        try:
-            user = User.objects.create_user(email=email, password=password)
-            # Добавляем автоматический вход
-            user = authenticate(request, username=email, password=password)
-            if user:
-                login(request, user)
-            return JsonResponse({
-                'status': 'success',
-                'redirect_url': '/',
-                'clear_cache': True  # Новый флаг
-            })
-        except ValidationError as e:
-            return JsonResponse({'status': 'error', 'message': e.message_dict.get('password', ['Неизвестная ошибка'])[0]})
-
-    return JsonResponse({'status': 'error', 'message': 'Недопустимый метод запроса'})
-
-
+@api_view(['GET'])
 @login_required
-@require_http_methods(["GET"])
 def get_projects(request):
-    projects = request.user.projects.all().values('id', 'title')
-    return JsonResponse({'projects': list(projects)})
+    try:
+        projects = request.user.projects.all().values('id', 'title')
+        return Response({
+            'projects': list(projects)
+        })
+    except Exception as e:
+        print("Ошибка при получении проектов:", str(e))
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# views.py
 @login_required
 @require_http_methods(["GET"])
 def get_project(request, project_id):
@@ -92,74 +148,89 @@ def get_project(request, project_id):
     except Project.DoesNotExist:
         return JsonResponse({'status': 'error'}, status=404)
 
-@csrf_protect
+@api_view(['POST'])
 @login_required
-@require_http_methods(["POST"])
 def save_project(request):
     try:
-        data = json.loads(request.body.decode('utf-8'))
-    except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
-    project_id = data.get('id')
-    sql_content = data.get('sql_content')
-    title = data.get('title')
-
-    if project_id:
-        project = Project.objects.filter(id=project_id, user=request.user).first()
-        if not project:
-            return JsonResponse({'status': 'error', 'message': 'Project not found'}, status=404)
-    else:
         project = Project(user=request.user)
+        project.title = request.data.get('title', 'Новый проект')
+        project.save()
+        return Response({
+            'status': 'success',
+            'project': {
+                'id': project.id,
+                'title': project.title
+            }
+        })
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    if title:
-        project.title = title
-    if sql_content is not None:
-        project.sql_content = sql_content
-
-    project.save()
-    return JsonResponse({'status': 'success', 'project': {'id': project.id, 'title': project.title}})
-
-
+@api_view(['PATCH'])
 @login_required
-@require_http_methods(["PATCH"])
 def update_project(request, project_id):
     try:
         project = Project.objects.get(id=project_id, user=request.user)
-        data = json.loads(request.body)
-        project.title = data.get('title', project.title)
+        
+        if 'title' in request.data:
+            project.title = request.data.get('title')
+        
+        if 'sql_content' in request.data:
+            project.sql_content = request.data.get('sql_content')
+        
         project.save()
-        return JsonResponse({'status': 'success'})
+        
+        return Response({
+            'status': 'success',
+            'project': {
+                'id': project.id,
+                'title': project.title,
+                'sql_content': project.sql_content
+            }
+        })
     except Project.DoesNotExist:
-        return JsonResponse({'status': 'error'}, status=404)
+        return Response({
+            'status': 'error',
+            'message': 'Проект не найден'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
+@api_view(['DELETE'])
 @login_required
-@require_http_methods(["DELETE"])
 def delete_project(request, project_id):
     try:
         project = Project.objects.get(id=project_id, user=request.user)
         project.delete()
-        return JsonResponse({'status': 'success'})
+        return Response({'status': 'success'})
     except Project.DoesNotExist:
-        return JsonResponse({'status': 'error'}, status=404)
+        return Response({'status': 'error'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@csrf_protect
-@login_required
+@api_view(['POST'])
+@ensure_csrf_cookie
 def logout_view(request):
-    logout(request)
-    return JsonResponse({'status': 'success'})
-
-
-import logging
+    try:
+        logout(request)
+        return Response({
+            'status': 'success',
+            'message': 'Выход выполнен успешно'
+        })
+    except Exception as e:
+        print("Ошибка при выходе из системы:", str(e))
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 logger = logging.getLogger(__name__)
-MAX_SQL_LENGTH = 10000  # 10k символов
-
-import json
-from django.http import JsonResponse
-from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import csrf_exempt
-
+MAX_SQL_LENGTH = 10000
 
 @require_POST
 @csrf_exempt
@@ -167,29 +238,57 @@ def sql_to_drawio(request):
     try:
         data = json.loads(request.body)
         sql_query = data.get('sql', '').strip()
-
-        # 1) проверить SQL (длину, пустоту)
-        # 2) parse_sql → tables_data (чисто в памяти)
-        tables_data = sql_to_json_data(sql_query)
-        print(tables_data)
-        if len(tables_data)==0:
+        
+        if not sql_query:
             return JsonResponse({
                 'status': 'error',
-                'message': 'пустой json'
+                'message': 'SQL запрос не должен быть пустым'
+            }, status=400)
+            
+        if len(sql_query) > MAX_SQL_LENGTH:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'SQL запрос слишком длинный (максимум {MAX_SQL_LENGTH} символов)'
+            }, status=400)
+
+        try:
+            tables_data = sql_to_json_data(sql_query)
+            logger.info(f"Parsed SQL to JSON data: {len(tables_data)} tables")
+            
+            if len(tables_data) == 0:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'SQL запрос не содержит определений таблиц'
+                }, status=400)
+        except Exception as e:
+            logger.error(f"Error parsing SQL: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Ошибка при обработке SQL: {str(e)}'
+            }, status=400)
+
+        try:
+            vis = Visualizer(tables_data)
+            drawio_xml = vis.visualize()
+            
+            if not drawio_xml or '<mxfile' not in drawio_xml:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Не удалось сгенерировать диаграмму из полученных данных'
+                }, status=500)
+        except Exception as e:
+            logger.error(f"Error visualizing tables: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Ошибка при создании диаграммы: {str(e)}'
             }, status=500)
 
-        # 3) Visualizer (чисто в памяти)
-        vis = Visualizer(tables_data)
-        drawio_xml = vis.visualize()  # возвращает строку-XML
-        print(drawio_xml)
-
-        # 4) JSON с этим XML
         return JsonResponse({
             'status': 'success',
             'xml': drawio_xml
         })
     except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+        return JsonResponse({'status': 'error', 'message': 'Неверный формат JSON'}, status=400)
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         return JsonResponse({

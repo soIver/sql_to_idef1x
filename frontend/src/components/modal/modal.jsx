@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import './modal.css';
+import { AuthContext } from '../auth/AuthProvider';
 
 export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
+  const { checkAuth } = useContext(AuthContext);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); 
-  
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+
   // Пути к изображениям для слайдера
   const images = [
     '/assets/img1.png',
@@ -26,11 +29,16 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
 
   const handleClose = () => {
     onClose();
+    setError('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
     window.history.pushState(null, '', '/');
   };
 
   const handleSwitch = (e, newType) => {
     e.preventDefault();
+    setError('');
     onClose();
     setTimeout(() => {
       onSwitchModal(newType);
@@ -39,21 +47,61 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
     }, 300);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Проверка совпадения паролей при регистрации
+    setError('');
+
     if (type === 'register' && password !== confirmPassword) {
-      alert('Пароли не совпадают');
+      setError('Пароли не совпадают');
       return;
     }
-    
-    // Обработка отправки формы
-    console.log({ 
-      email, 
-      password,
-      ...(type === 'register' && { confirmPassword }) // Добавляем только при регистрации
-    });
+
+    try {
+      // CSRF-токен из кук
+      const csrfCookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='));
+      const csrfToken = csrfCookie ? csrfCookie.split('=')[1] : '';
+
+      const endpoint = type === 'login' ? '/api/login/' : '/api/register/';
+      console.log('Отправка запроса на:', endpoint);
+      console.log('Отправляемые данные:', { email, password });
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Csrftoken': csrfToken
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          password2: confirmPassword
+        })
+      });
+
+      console.log('Статус ответа:', response.status);
+
+      if (!response.ok) {
+        let errorText;
+        try {
+          const errorData = await response.json();
+          errorText = errorData.error || `Ошибка при ${type === 'login' ? 'входе' : 'регистрации'}`;
+        } catch (e) {
+          errorText = `Ошибка при ${type === 'login' ? 'входе' : 'регистрации'}: ${response.status}`;
+        }
+        throw new Error(errorText);
+      }
+
+      const data = await response.json();
+      await checkAuth();
+      handleClose();
+      alert(data.message || (type === 'login' ? 'Вход выполнен успешно' : 'Регистрация выполнена успешно'));
+    } catch (error) {
+      console.error('Полная ошибка:', error);
+      setError(error.message || `Произошла ошибка при ${type === 'login' ? 'входе' : 'регистрации'}`);
+    }
   };
 
   // Эффекты
@@ -83,7 +131,7 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
           </div>
           <div className="modal-line"></div>
         </div>
-        
+
         {/* Правая часть с формой */}
         <div className="modal-right">
           <img
@@ -94,7 +142,7 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
           />
 
           <h2>{type === 'login' ? 'Вход' : 'Регистрация'}</h2>
-          
+
           <form onSubmit={handleSubmit}>
             <div className="input-group">
               <label htmlFor="email">Почта</label>
@@ -107,7 +155,7 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
                 placeholder="Введите вашу почту"
               />
             </div>
-            
+
             <div className="input-group password-text">
               <label htmlFor="password">Пароль</label>
               <input
@@ -133,16 +181,18 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
                 />
               </div>
             )}
-            
-            <button type="submit" >
+
+            {error && <div className="error-message">{error}</div>}
+
+            <button type="submit">
               {type === 'login' ? 'Войти' : 'Зарегистрироваться'}
             </button>
           </form>
-          
+
           <p className={type === 'login' ? 'register-text' : 'login-text'}>
             {type === 'login' ? 'У вас ещё нет аккаунта?' : 'У вас уже есть аккаунт?'}
-            
-            <button 
+
+            <button
               className="link-button"
               onClick={(e) => handleSwitch(e, type === 'login' ? 'register' : 'login')}
             >

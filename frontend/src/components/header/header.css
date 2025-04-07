@@ -44,11 +44,35 @@ header {
     display: flex;
     justify-content: center;
     align-items: center;
+    transition: all 0.1s ease;
 }
+
+.profile:hover {
+    transform: scale(1.05);
+  }
 
 .profile img {
     width: 6rem;
     height: 6rem;
+}
+
+.profile.logged-in {
+    background-color: #393e4e;
+    width: 6rem;
+    height: 3rem;
+    padding: 6px 15px;
+    border-radius: 4rem;
+    transition: background-color 0.2s;
+}
+
+.profile.logged-in:hover {
+    background-color: #525e86;
+}
+
+.profile.logged-in span {
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
 }
 
 @media (max-width: 200rem) {

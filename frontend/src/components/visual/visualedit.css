@@ -1,20 +1,58 @@
 .visual-editor {
+    background-color: white;
     width: 100%;
-    height: 30rem;
-    border: 0.125rem solid #ffffff;
-    border-radius: 1.2rem;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    border-radius: 1.2rem;
     overflow: hidden;
-    background: #ffffff;
+    border: 0.2rem solid #fff;
 }
 
 .visual-editor-content {
     width: 100%;
     height: 100%;
-    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+}
+
+.visual-editor-content iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    padding: 1rem;
+    border-radius: 1.2rem;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #333;
+    text-align: center;
+}
+
+.error-message {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    z-index: 5;
+    font-size: 0.9rem;
 }
 
 @media (max-width: 180rem) {
@@ -26,6 +64,12 @@
 @media (max-width: 160rem) {
     .visual-editor {
         height: 55rem;
+    }
+}
+
+@media (max-width: 140rem) {
+    .visual-editor {
+        height: 45rem;
     }
 }
 

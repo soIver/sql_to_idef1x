@@ -1,7 +1,18 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import './header.css';
+import { AuthContext } from '../auth/AuthProvider';
 
 export default function Header({ onOpenModal }) {
+  const { isAuthenticated, logout } = useContext(AuthContext);
+
+  const handleAuthAction = () => {
+    if (isAuthenticated) {
+      logout();
+    } else {
+      onOpenModal('login');
+    }
+  };
+
   return (
     <header className="header">
       <a href="/" className="logo">
@@ -10,10 +21,14 @@ export default function Header({ onOpenModal }) {
       <p className="name">Convertools</p>
       <div className="profi">
         <button 
-          className="profile" 
-          onClick={() => onOpenModal('login')} // Добавлен обработчик клика
+          className={`profile ${isAuthenticated ? 'logged-in' : ''}`} 
+          onClick={handleAuthAction}
         >
-          <img src="/assets/profile.png" alt="profile" />
+          {isAuthenticated ? (
+            <span>Выйти</span>
+          ) : (
+            <img src="/assets/profile.png" alt="profile" />
+          )}
         </button>
       </div>
     </header>

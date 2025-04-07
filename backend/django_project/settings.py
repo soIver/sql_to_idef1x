@@ -18,9 +18,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'myapp',
     'corsheaders',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -30,7 +32,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'myapp.middleware.NoCacheMiddleware',
     'myapp.middleware.AjaxMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'django_project.urls'
@@ -87,42 +88,47 @@ USE_I18N = True
 
 USE_TZ = True
 
-STATIC_URL = '/collections/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'myapp/collections/static')
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'myapp/static'), os.path.join(BASE_DIR, 'react_apps/build/static')]
+STATIC_URL = '/static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # аутентификация
 LOGIN_URL = '/login/'          # для перенаправления неавторизованных пользователей
 LOGIN_REDIRECT_URL = '/'       # для перенаправления после успешного входа
-
-CSRF_COOKIE_SECURE = False
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_HTTPONLY = False
-CORS_ALLOW_CREDENTIALS = True
-
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
+    "http://localhost:5173",
 ]
 
-# settings.py
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:8000",
+]
+
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = False
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_NAME = 'csrftoken'
+CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+}
+
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.dummy.DummyCache',  # Временно отключите кеш
     }
 }
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:8000',
-    'http://127.0.0.1:8000'
-]
-
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
-
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 AUTH_USER_MODEL = 'myapp.User'

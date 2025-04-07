@@ -1,10 +1,7 @@
-import os
-import tempfile
-import json
-from pathlib import Path
-
-import drawpyo
+import drawpyo, json
 from drawpyo.diagram import object_from_library as Node, Edge as Edge, TextFormat
+from .gptapi import get_ru_names
+
 from collections import defaultdict, deque
 
 def sort_vertices_by_degree(adj_matrix, n):
@@ -40,243 +37,285 @@ def sort_vertices_by_degree(adj_matrix, n):
                     queue.append(neighbor)
     return result
 
-
-class Visualizer:
-    """
-    Класс для генерации drawio-XML на основе структуры `data` (списка таблиц),
-    без использования постоянного файла .drawio на диске.
-    В конце `visualize()` возвращает XML-строку.
-    """
-
-    def __init__(self, data: list[dict]):
-        """
-        :param data: список словарей вида:
-            [
-              {
-                "name": "table_name",
-                "columns": [ ... ],
-                "primary_keys": [ ... ],
-                "foreign_keys": [ ... ]
-              },
-              ...
-            ]
-        """
-        self.file = drawpyo.File()
+class Visualizer():
+    def __init__(self, json_data: str):
         self.page = Page(self)
+        self.file = drawpyo.File()
         self.file.add_page(self.page)
-        self.data = data
+        self.mylib = drawpyo.diagram.import_shape_database("django_project/mylib.toml")
+        self.json_data = json_data
 
-        # Подгружаем библиотеку фигур (mylib.toml) из той же папки
-        self.mylib = drawpyo.diagram.import_shape_database(
-            Path(__file__).parent / "mylib.toml"
-        )
-
-    def visualize(self, translate: bool = False) -> str:
-        """
-        Основной метод визуализации: обходит self.data, строит сущности/связи
-        и в конце сохраняет результат во временный файл .drawio, читая его в xml_str.
-
-        :param translate: (необязательный) – если требуется логика перевода, можно включить.
-        :return: Строка XML (.drawio) для дальнейшей передачи на фронтенд.
-        """
+    def visualize(self, translate: bool = False):
         self.entities: dict[str, Entity] = {}
         self.relations: dict[str, Relation] = {}
-
-        data = self.data
+        data: list[dict] = self.json_data
         blocks_cnt = len(data)
-        adj_matrix: list[list[bool]] = [[False]*blocks_cnt for _ in range(blocks_cnt)]
-        constraint_entities: dict[str, list[str]] = {}
+        adj_matrix: list[list[bool]] = [[0 for x in range(blocks_cnt)] for y in range(blocks_cnt)]
+        constraint_entities: dict[str, list[str]] = {} # имена отношений по именам ограничений
+        data_for_translate: list[dict] = []
+        
+        if translate:
+            # генерация и вставка в исходную структуру названий объектов на русском языке
+            for block in data:
+                data_for_translate.append({
+                    'name': block.get('name'),
+                    'name_ru': '',
+                    'columns': [],
+                    'foreign_keys': []
+                })
+                for column in block.get('columns'):
+                    data_for_translate[-1]['columns'].append({
+                        'name': column.get('name'),
+                        'name_ru': ''
+                    })
+                for fk in block.get('foreign_keys'):
+                    data_for_translate[-1]['foreign_keys'].append({
+                        'reference_table': fk.get('references').get('table'),
+                        'label_ru': ''
+                    })
+                if len(data_for_translate[-1].get('foreign_keys')) == 0:
+                    data_for_translate[-1].pop('foreign_keys')
+            translated_string: str = get_ru_names(data_for_translate).get('message')
+            translated_string = translated_string.replace('json', '').strip('```')
+            translated_data: list[dict[str, str | list[dict[str, str]]]] = json.loads(translated_string)
+            # меняем исходные имена на сгенерированные
+            for i in range(len(data)):
+                data[i]['name_ru'] = translated_data[i].get('name_ru')
+                columns = data[i].get('columns')
+                columns_ru = translated_data[i].get('columns')
+                for j in range(len(columns)):
+                    columns[j]['name_ru'] = columns_ru[j].get('name_ru')
+                foreign_keys = data[i].get('foreign_keys')
+                foreign_keys_ru = translated_data[i].get('foreign_keys')
+                for k in range(len(foreign_keys)):
+                    foreign_keys[k]['label_ru'] = foreign_keys_ru[k]['label_ru']
 
-        # --- Здесь может быть логика translate, если вам нужна. Оставляем заглушку ---
-        # if translate:
-        #     ... (ваш код)...
-
-        # Распарсили таблицы, создаём объекты Entity/Relation
+        print(data)
         entity_names = []
         for entity_index, block in enumerate(data):
+            # создание экземпляра отношения
             entity_width, entity_height = 200, 60
             entity_name = block.get('name')
             entity_name_ru = block.get('name_ru', entity_name)
             entity_names.append(entity_name)
-
-            # Создаём объект Entity
             self.entities[entity_name] = Entity(entity_name_ru, entity_width, entity_height, self.page)
 
-            # Собираем первичные/внешние ключи
-            pks = {}
-            for pk in block.get('primary_keys', []):
-                for col in pk.get('columns', []):
-                    pks[col] = True
+            # учёт первичных и внешних ключей
+            pks: dict[str, bool] = {}
+            fks: dict[str, bool] = {}
+            for pk in block.get('primary_keys'):
+                for column in pk.get('columns'):
+                    pks[column] = True
 
-            fks = {}
-            for fk in block.get('foreign_keys', []):
-                self.entities[entity_name].is_dependent = True
-                for col in fk.get('columns', []):
-                    fks[col] = True
-
+            for fk in block.get('foreign_keys'):
+                self.entities.get(entity_name).is_dependent = True
+                for column in fk.get('columns'):
+                    fks[column] = True
                 referring_entity_name = entity_name
-                reference_entity_name = fk.get('references', {}).get('table')
-                # Ищем индекс таблицы, на которую есть ссылка
-                ref_index = -1
-                for i, other_block in enumerate(data):
-                    if other_block.get('name') == reference_entity_name:
-                        ref_index = i
+                reference_entity_name = fk.get('references').get('table')
+                i = -1
+                for block_ in data:
+                    i += 1
+                    if block_.get('name') == reference_entity_name:
+                        reference_entity_index = i
                         break
-
-                constr_name = fk.get('constraint_name', 'fk_unnamed')
+                constr_name = fk.get('constraint_name')
                 constraint_entities[constr_name] = [referring_entity_name, reference_entity_name]
                 self.entities[referring_entity_name].add_constraint(constr_name)
                 self.entities[reference_entity_name].add_constraint(constr_name)
-
-                # Заполняем матрицу смежности
-                adj_matrix[entity_index][ref_index] = True
-                adj_matrix[ref_index][entity_index] = True
-
-                # label_ru, column, references.column
                 label = fk.get('label_ru', 'включает')
-                self.relations[constr_name] = Relation(
-                    label=label,
-                    referring_entity_name=referring_entity_name,
-                    reference_entity_name=reference_entity_name,
-                    reffering_column_name=fk.get('column'),
-                    reference_column_name=fk.get('references', {}).get('column'),
-                    page=self.page
-                )
 
-            # Добавляем колонки
-            for column in block.get('columns', []):
+                adj_matrix[entity_index][reference_entity_index] = 1
+                adj_matrix[reference_entity_index][entity_index] = 1
+
+                self.relations[constr_name] = Relation(label, referring_entity_name, reference_entity_name, fk.get('column'), fk.get('references').get('column'), self.page)
+
+            # добавление атрибутов в экземпляры отношений
+            for column in block.get('columns'):
                 col_name = column.get('name')
                 col_name_ru = column.get('name_ru', col_name)
                 primary = pks.get(col_name, False)
                 foreign = fks.get(col_name, False)
-                self.entities[entity_name].add_column(col_name_ru, primary, foreign)
+                self.entities.get(entity_name).add_column(col_name_ru, primary, foreign)
 
-        # Расставляем координаты
-        x_interval = 120
-        y_interval = 60
+        # Третий проход: размещаем сущности и создаем связи
+        x_interval = 300  # Увеличим интервалы для лучшего распределения
+        y_interval = 200
         x = 0
         y = 0
-        sides_priority = ('bottom', 'right', 'top', 'left')
-
+        sides_priority: tuple[str] = ('right', 'left', 'bottom', 'top')  # Приоритет горизонтальных связей
         order = sort_vertices_by_degree(adj_matrix, blocks_cnt)
+        
+        # Создаем сетку для размещения сущностей
+        grid_size = int(len(order) ** 0.5) + 1
+        grid = [[None for _ in range(grid_size)] for _ in range(grid_size)]
+        current_row = 0
+        current_col = 0
+        
+        # Размещаем первую сущность в центре
+        center_row = grid_size // 2
+        center_col = grid_size // 2
+        center_entity_name = entity_names[order[0]]
+        center_entity = self.entities.get(center_entity_name)
+        x = center_col * x_interval
+        y = center_row * y_interval
+        center_entity.implement(x, y)
+        grid[center_row][center_col] = center_entity_name
+        
+        # Функция для поиска ближайшей свободной ячейки
+        def find_nearest_free_cell(grid, entity_row, entity_col):
+            min_distance = float('inf')
+            best_pos = None
+            for i in range(len(grid)):
+                for j in range(len(grid[0])):
+                    if grid[i][j] is None:
+                        distance = abs(i - entity_row) + abs(j - entity_col)
+                        if distance < min_distance:
+                            min_distance = distance
+                            best_pos = (i, j)
+            return best_pos
+        
+        # Размещаем остальные сущности
+        for i in range(1, len(order)):
+            entity_name = entity_names[order[i]]
+            entity = self.entities.get(entity_name)
+            
+            # Находим связанные уже размещенные сущности
+            connected_positions = []
+            for row in range(grid_size):
+                for col in range(grid_size):
+                    if grid[row][col] is not None:
+                        placed_entity = grid[row][col]
+                        if adj_matrix[order[i]][entity_names.index(placed_entity)]:
+                            connected_positions.append((row, col))
+            
+            # Если есть связанные сущности, размещаем рядом с ними
+            if connected_positions:
+                # Вычисляем среднюю позицию связанных сущностей
+                avg_row = sum(pos[0] for pos in connected_positions) / len(connected_positions)
+                avg_col = sum(pos[1] for pos in connected_positions) / len(connected_positions)
+                # Находим ближайшую свободную ячейку к средней позиции
+                pos = find_nearest_free_cell(grid, int(avg_row), int(avg_col))
+                if pos:
+                    row, col = pos
+                    x = col * x_interval
+                    y = row * y_interval
+                    entity.implement(x, y)
+                    grid[row][col] = entity_name
+            
+            # Если нет связанных сущностей, размещаем в следующей свободной ячейке
+            if entity.object is None:
+                pos = find_nearest_free_cell(grid, center_row, center_col)
+                if pos:
+                    row, col = pos
+                    x = col * x_interval
+                    y = row * y_interval
+                    entity.implement(x, y)
+                    grid[row][col] = entity_name
+        
+        # Создаем связи с учетом расположения сущностей
+        processed_constraints = set()
         for i in order:
             center_entity_name = entity_names[i]
             center_entity = self.entities.get(center_entity_name)
-            if not center_entity:
-                continue
-
-            constraints = center_entity.constraints
-            if center_entity.object is None:
-                center_entity.implement(x, y)
-
+            constraints = center_entity.constraints.copy()
+            
             for constraint in constraints:
-                related_list = constraint_entities[constraint]
-                # related_list = [referring, reference]
-                # Удаляем из списка текущее имя
-                other_entity_name = [nm for nm in related_list if nm != center_entity_name][0]
-                other_entity = self.entities.get(other_entity_name)
-                if not other_entity:
+                if constraint in processed_constraints:
                     continue
-                if constraint in other_entity.constraints:
-                    other_entity.constraints.remove(constraint)
-
-                # Ищем первую свободную сторону
-                side_to_use = None
-                for side in sides_priority:
-                    if not center_entity.sides[side]:
-                        side_to_use = side
-                        center_entity.sides[side] = True
-                        opposite_side = sides_priority[sides_priority.index(side) - 2]
-                        other_entity.sides[opposite_side] = True
+                    
+                processed_constraints.add(constraint)
+                related_entity_name = constraint_entities[constraint].copy()
+                related_entity_name.remove(center_entity_name)
+                related_entity_name = related_entity_name[0]
+                related_entity = self.entities.get(related_entity_name)
+                
+                # Определяем лучшую сторону для подключения на основе взаимного расположения
+                dx = related_entity.x - center_entity.x
+                dy = related_entity.y - center_entity.y
+                
+                if abs(dx) > abs(dy):
+                    # Горизонтальная связь
+                    if dx > 0:
+                        primary_sides = ['right', 'top', 'bottom', 'left']
+                        opposite_sides = ['left', 'top', 'bottom', 'right']
+                    else:
+                        primary_sides = ['left', 'top', 'bottom', 'right']
+                        opposite_sides = ['right', 'top', 'bottom', 'left']
+                else:
+                    # Вертикальная связь
+                    if dy > 0:
+                        primary_sides = ['bottom', 'right', 'left', 'top']
+                        opposite_sides = ['top', 'right', 'left', 'bottom']
+                    else:
+                        primary_sides = ['top', 'right', 'left', 'bottom']
+                        opposite_sides = ['bottom', 'right', 'left', 'top']
+                
+                # Пытаемся найти доступные точки подключения
+                connection_found = False
+                for side, opposite_side in zip(primary_sides, opposite_sides):
+                    center_point = center_entity.get_available_connection_point(side)
+                    if center_point is None:
+                        continue
+                        
+                    opposite_point = related_entity.get_available_connection_point(opposite_side)
+                    if opposite_point is not None:
+                        connection_found = True
                         break
-                if not side_to_use:
-                    side_to_use = 'right'  # fallback
-
-                match side_to_use:
-                    case 'bottom':
-                        x = center_entity.x
-                        y = center_entity.y + center_entity.height + y_interval
-                        entries = (0.5, 1)
-                    case 'right':
-                        x = center_entity.x + center_entity.width + x_interval
-                        y = center_entity.y
-                        entries = (1, 0.5)
-                    case 'top':
-                        x = center_entity.x
-                        y = center_entity.y - center_entity.height - y_interval
-                        entries = (0.5, 0)
-                    case 'left':
-                        x = center_entity.x - center_entity.width - x_interval
-                        y = center_entity.y
-                        entries = (0, 0.5)
-                    case _:
-                        # default
-                        x = center_entity.x + center_entity.width + x_interval
-                        y = center_entity.y
-                        entries = (1, 0.5)
-
-                if other_entity.object is None:
-                    other_entity.implement(x, y)
-
-                from_child = (constraint_entities[constraint].index(center_entity_name) == 0)
-                self.relations[constraint].implement(self.entities, entries, from_child)
-
+                
+                if not connection_found:
+                    continue
+                
+                from_child = constraint_entities.get(constraint).index(center_entity_name) == 0
+                self.relations.get(constraint).implement(self.entities, (center_point, opposite_point), from_child)
 
         return self.file.xml
-
 
 class Page(drawpyo.Page):
     def __init__(self, translator: Visualizer, file=None, **kwargs):
         super().__init__(file, **kwargs)
         self.translator = translator
-
-    def add_node(
-        self, node_type: str, text: str,
-        x: int = 0, y: int = 0,
-        width: int = 200, height: int = 30,
-        rounded: bool = False, parent=None
-    ):
+        
+    def add_node(self, node_type: str, text: str, x: int = 0, y: int = 0, width: int = 200, height: int = 30, rounded: bool = False, parent = None):
         node = Node(
-            page=self,
-            library=self.translator.mylib,
-            obj_name=node_type,
-            value=text,
-            position=(x, y),
-            height=height,
-            width=width
+        page = self,
+        library = self.translator.mylib,
+        obj_name = node_type,
+        value = text,
+        position = (x, y),
+        height = height,
+        width = width
         )
-        if parent is not None:
+        if not parent is None:
             node.parent = parent
         node.rounded = rounded
         self.add_object(node)
         return node
-
-    def add_edge(
-        self, source: Node, target: Node,
-        label: str, dashed: bool, entries: tuple[float]
-    ):
+    
+    def add_edge(self, source: Node, target: Node, label: str, dashed: bool, entries: tuple[tuple[float]]):
         if label:
-            edge = Edge(source=source, target=target, label=label, label_position=0, label_offset=20)
+            edge = Edge(source=source, target=target, label=label, label_position=0, label_offset = 20)
         else:
             edge = Edge(source=source, target=target)
-
         if dashed:
             edge.pattern = 'dashed_small'
-
-        edge.entryX = entries[0]
-        edge.entryY = entries[1]
+        
+        # Устанавливаем точки подключения
+        edge.entryX = entries[0][0]
+        edge.entryY = entries[0][1]
+        edge.exitX = entries[1][0]
+        edge.exitY = entries[1][1]
         edge.endArrow = 'oval'
         edge.endFill_target = True
         edge.endSize = 10
         edge.strokeWidth = 2
         edge.startArrow = 'none'
-        edge.text_format = TextFormat(bold=True)
+        edge.text_format = TextFormat(bold = True)
 
         self.add_object(edge)
         return edge
 
-
-class Entity:
+class Entity():
     def __init__(self, name: str, start_width: int, start_height: int, page: Page):
         self.name = name
         self.page = page
@@ -286,74 +325,90 @@ class Entity:
         self.y = 0
         self.is_dependent = False
         self.object = None
-        self.columns: list[dict[str, bool | str]] = []
+        self.columns: list[dict[str, str | bool]] = []
         self.constraints: list[str] = []
-        # Признаки занятости сторон (чтобы не накладывать связи друг на друга):
-        self.sides = {'left': False, 'right': False, 'top': False, 'bottom': False}
+        self.sides = {
+            'left': [],  # список занятых точек слева
+            'right': [], # список занятых точек справа
+            'top': False, # сверху и снизу оставляем по одной точке
+            'bottom': False
+        }
+        self.connection_points = {
+            'left': 0,   # количество доступных точек слева
+            'right': 0,  # количество доступных точек справа
+            'top': 1,    # по одной точке сверху и снизу
+            'bottom': 1
+        }
 
-    def add_constraint(self, constraint_name: str):
+    def add_constraint(self, constraint_name):
         self.constraints.append(constraint_name)
 
     def add_column(self, col_name: str, primary: bool, foreign: bool):
         self.columns.append({'name': col_name, 'primary': primary, 'foreign': foreign})
         self.height += 30
         self.width = max(self.width, len(col_name) * 7)
+        # Увеличиваем количество точек подключения на правой и левой сторонах
+        self.connection_points['left'] = len(self.columns)
+        self.connection_points['right'] = len(self.columns)
+
+    def get_available_connection_point(self, side: str) -> tuple[float]:
+        if side in ['top', 'bottom']:
+            if self.sides[side]:
+                return None
+            self.sides[side] = True
+            return (0.5, 1 if side == 'bottom' else 0)
+        # Для левой и правой сторон
+        available_points = self.connection_points[side]
+        used_points = len(self.sides[side])
+        
+        if used_points >= available_points:
+            return None
+            
+        # Вычисляем позицию точки подключения
+        point_index = used_points
+        total_points = available_points
+        if total_points == 1:
+            y_pos = 0.5
+        else:
+            y_pos = (point_index + 1) / (total_points + 1)
+            
+        self.sides[side].append(point_index)
+        return (1 if side == 'right' else 0, y_pos)
 
     def implement(self, x: int, y: int):
         self.x = x
         self.y = y
-        # Верхний "текстовый" узел (имя сущности)
         self.label = self.page.add_node('text', self.name, self.x, self.y, self.width)
-        # Область, где колонки
-        y_offset = 30
-        x_offset = 0
-        self.object = self.page.add_node(
-            'entity', '',
-            x_offset, y_offset,
-            self.width,
-            rounded=self.is_dependent,
-            parent=self.label
-        )
-
-        # Сортируем колонки так, чтобы PrimaryKey шли первыми
-        self.columns.sort(key=lambda c: not c['primary'])
-
-        cur_y = y_offset
+        y = 30
+        x = 0
+        self.object = self.page.add_node('entity', '', x, y, self.width, rounded = self.is_dependent, parent = self.label)
+        self.columns.sort(key=lambda x: not x['primary'])
         for column in self.columns:
-            col_text = column['name']
-            if column['foreign']:
-                col_text += ' (FK)'
-
-            if column['primary']:
-                # Первичный ключ пишем в "title" (self.object.value) через <br>
+            name = column.get('name')
+            primary = column.get('primary')
+            foreign = column.get('foreign')
+            if foreign:
+                name += ' (FK)'
+            if primary:
+                name = '&nbsp;' + name
                 if self.object.value:
-                    col_text = '<br><br>' + col_text
-                    start_size = int(self.object._getattribute__('startSize')) + 30
+                    name = '<br><br>' + name
+                    start_size = int(self.object.__getattribute__('startSize')) + 30
                     self.object._add_and_set_style_attrib('startSize', start_size)
-                    cur_y += 30
+                    y += 30
                     self.object.height += 30
-                self.object.value += col_text
+                self.object.value += name
             else:
-                # Обычная колонка
-                cur_y += 30
+                self.page.add_node('entity_column', name, x, y, self.width, parent = self.object)
+                y += 30
                 self.object.height += 30
-                self.page.add_node('entity_column', col_text, x_offset, cur_y, self.width, parent=self.object)
 
-        # Если все колонки оказались первичными, дополнительно увеличим высоту (пример)
-        if all(c['primary'] for c in self.columns):
+        # если все атрибуты в составе первичного ключа - добавляем пространство
+        if all(column.get('primary') for column in self.columns):
             self.object.height += 30
-
-
-class Relation:
-    def __init__(
-        self,
-        label: str,
-        referring_entity_name: str,
-        reference_entity_name: str,
-        reffering_column_name: str,
-        reference_column_name: str,
-        page: Page
-    ):
+                
+class Relation():
+    def __init__(self, label: str, referring_entity_name: str, reference_entity_name: str, reffering_column_name: str, reference_column_name: str, page: Page):
         self.referring_entity_name = referring_entity_name
         self.reference_entity_name = reference_entity_name
         self.referring_column_name = reffering_column_name
@@ -361,44 +416,92 @@ class Relation:
         self.page = page
         self.label = label
 
-    def implement(self, entities: dict[str, Entity], entries: tuple[float, float], from_child: bool):
-        """
-        :param from_child: True, если текущая (center_entity) – child, иначе parent
-        """
+    def implement(self, entities: dict[str, Entity], connection_points: tuple[tuple[float]], from_child: bool):
         if from_child:
-            reference_obj = entities[self.referring_entity_name].object
-            referring_ent = entities[self.reference_entity_name]
+            reference_entity_object = entities.get(self.referring_entity_name).object
+            referring_entity: Entity = entities.get(self.reference_entity_name)
+            reference_entity: Entity = entities.get(self.referring_entity_name)
         else:
-            reference_obj = entities[self.reference_entity_name].object
-            referring_ent = entities[self.referring_entity_name]
-
-        # Если связь снизу (0.5, 1), возможно хотим крепить её к label
-        if entries == (0.5, 1):
-            referring_obj = referring_ent.label
+            reference_entity_object = entities.get(self.reference_entity_name).object
+            referring_entity: Entity = entities.get(self.referring_entity_name)
+            reference_entity: Entity = entities.get(self.reference_entity_name)
+            
+        # Определяем, какой объект использовать для подключения
+        if connection_points[0][1] == 1 or connection_points[0][1] == 0:  # если точка сверху или снизу
+            referring_entity_object = referring_entity.label
         else:
-            referring_obj = referring_ent.object
+            referring_entity_object = referring_entity.object
 
-        # Определяем, dashed ли связь
         dashed = True
         not_dashed_cnt = 0
-
-        for col in entities[self.referring_entity_name].columns:
-            if col['name'] == self.referring_column_name:
+        for column in entities.get(self.referring_entity_name).columns:
+            if column.get('name') == self.referring_column_name:
                 not_dashed_cnt += 1
                 break
-        for col in entities[self.reference_entity_name].columns:
-            if col['name'] == self.referring_column_name:
+        for column in entities.get(self.reference_entity_name).columns:
+            if column.get('name') == self.referring_column_name:
                 not_dashed_cnt += 1
                 break
-
         if not_dashed_cnt == 2:
             dashed = False
-
-        # Добавляем линию
-        self.object = self.page.add_edge(
-            source=referring_obj,
-            target=reference_obj,
-            label=self.label,
-            dashed=dashed,
-            entries=entries
-        )
+            
+        # Проверяем вертикальное и горизонтальное расположение сущностей
+        # для определения правильных точек подключения
+        source_entity = referring_entity
+        target_entity = reference_entity
+        
+        # Получаем размеры объектов (высота и ширина сущностей)
+        source_height = source_entity.height
+        source_width = source_entity.width
+        target_height = target_entity.height
+        target_width = target_entity.width
+        
+        # Определяем реальные координаты с учетом размеров
+        source_bottom = source_entity.y + source_height
+        source_right = source_entity.x + source_width
+        target_bottom = target_entity.y + target_height
+        target_right = target_entity.x + target_width
+        
+        # Вертикальное сравнение (учитываем высоту сущностей)
+        if source_entity.y > target_bottom:
+            # Источник ниже цели (с учетом высоты цели)
+            # Подключаем к нижней точке верхней сущности и верхней точке нижней
+            if connection_points[1][1] == 0:  # Если верхняя точка, меняем на нижнюю
+                # Сбрасываем предыдущую занятую точку
+                target_entity.sides['top'] = False
+                # Получаем новую точку подключения
+                new_point = target_entity.get_available_connection_point('bottom')
+                if new_point:
+                    connection_points = (connection_points[0], new_point)
+        elif target_entity.y > source_bottom:
+            # Цель ниже источника (с учетом высоты источника)
+            # Подключаем к нижней точке верхней сущности и верхней точке нижней
+            if connection_points[0][1] == 0:  # Если верхняя точка, меняем на нижнюю
+                # Сбрасываем предыдущую занятую точку
+                source_entity.sides['top'] = False
+                # Получаем новую точку подключения
+                new_point = source_entity.get_available_connection_point('bottom')
+                if new_point:
+                    connection_points = (new_point, connection_points[1])
+        
+        # Горизонтальное сравнение (учитываем ширину сущностей)
+        elif source_entity.x > target_right:
+            # Источник правее цели (с учетом ширины цели)
+            # Подключаем к правой точке левой сущности и левой точке правой
+            if connection_points[1][0] == 1:  # Если правая точка, меняем на левую
+                # Заменяем занятую точку
+                # (здесь сложнее, так как точек может быть несколько)
+                # Пытаемся найти новую точку подключения
+                new_point = target_entity.get_available_connection_point('right')
+                if new_point:
+                    connection_points = (connection_points[0], new_point)
+        elif target_entity.x > source_right:
+            # Цель правее источника (с учетом ширины источника)
+            # Подключаем к правой точке левой сущности и левой точке правой
+            if connection_points[0][0] == 1:  # Если правая точка, меняем на левую
+                # Заменяем занятую точку
+                new_point = source_entity.get_available_connection_point('right')
+                if new_point:
+                    connection_points = (new_point, connection_points[1])
+             
+        self.object = self.page.add_edge(referring_entity_object, reference_entity_object, self.label, dashed, connection_points)

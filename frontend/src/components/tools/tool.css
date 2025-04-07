@@ -4,11 +4,22 @@
   cursor: pointer;
   padding: 0.3rem;
   border-radius: 0.3rem;
-  transition: background 0.2s;
+  transition: all 0.1s ease;
+}
+
+.tool-button:hover {
+  transform: scale(1.05);
+}
+
+.tool-button.disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
 }
 
 .tool-button img {
   display: block;
+  transition: transform 0.1s;
 }
 
 .tool-button:nth-child(1) img {
@@ -24,13 +35,15 @@
 }
 
 .tool-button:nth-child(4) img {
-  width: 1.3rem;
+  width: 1.2rem;
   height: 1.5rem;
 }
 
 .tool-button:nth-child(5) img {
-  width: 1.3rem;
+  width: 1.2rem;
   height: 1.3rem;
+  margin-right: 0.4rem;
+
 }
 
 .menubtn {
@@ -38,7 +51,11 @@
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  padding: 0;
+  transition: all 0.1s ease;
+}
+
+.menubtn:hover {
+  transform: scale(1.05);
 }
 
 .menubtn img {
@@ -46,7 +63,7 @@
   height: 3.5rem;
   border-radius: 50%;
   display: block;
-  transition: transform 0.2s;
+  transition: transform 0.1s;
 }
 
 .tools {
