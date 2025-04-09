@@ -22,6 +22,7 @@ function App() {
   const projectsLoadedRef = useRef(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSavedContent, setLastSavedContent] = useState({});
+  const visualEditorRef = useRef(null);
 
   const handleOpenModal = useCallback((type) => {
     if (activeModal && activeModal !== type) {
@@ -157,19 +158,16 @@ function App() {
     if (value !== sqlContent) {
       setSqlContent(value);
 
-      // Сохраняем в localStorage, если есть активный проект
       if (activeProjectId) {
         const localKey = `project_content_${activeProjectId}`;
         localStorage.setItem(localKey, value);
 
-        // Проверяем, есть ли изменения по сравнению с последним сохранением
         const savedContent = lastSavedContent[activeProjectId] || '';
         setHasUnsavedChanges(value !== savedContent);
       }
     }
   }, [sqlContent, activeProjectId, lastSavedContent]);
 
-  // Сохранение содержимого проекта
   const handleSave = async () => {
     if (!activeProjectId || !sqlEditorRef.current) {
       console.error('Нет активного проекта или редактора');
@@ -231,6 +229,13 @@ function App() {
   const handleRedo = () => {
     if (sqlEditorRef.current) {
       sqlEditorRef.current.redo();
+    }
+  };
+
+  const handleExportPng = () => {
+    console.log('Вызвана функция handleExportPng в App.jsx');
+    if (visualEditorRef.current) {
+      visualEditorRef.current.exportDiagram();
     }
   };
 
@@ -321,6 +326,7 @@ function App() {
               isSaveDisabled={!hasUnsavedChanges}
               onUndo={handleUndo}
               onRedo={handleRedo}
+              onExport={handleExportPng}
             />
             {savingStatus === 'saving' && <div className="saving-status">Сохранение проекта...</div>}
             {savingStatus === 'success' && <div className="saving-status success">Проект сохранён!</div>}
@@ -340,7 +346,10 @@ function App() {
               />
             </div>
             <div className="visual-editor-container">
-              <VisualEditor sqlContent={sqlContent} />
+              <VisualEditor
+                ref={visualEditorRef}
+                sqlContent={sqlContent}
+              />
             </div>
           </div>
         </div>

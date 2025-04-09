@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import './projects.css';
-import { useCsrfToken } from '../../hooks/useCsrfToken';
-import { AuthContext } from '../auth/AuthProvider';
+import { useCsrfToken } from '../../hooks/useCsrfToken.ts';
+import { AuthContext } from '../auth/AuthProvider.jsx';
+import ChooseModal from './choose.tsx';
+import './choose.css';
 
 interface Project {
   id: string;
@@ -31,9 +33,43 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
   const [error, setError] = useState<string | null>(null);
   const projectsLoadedRef = useRef(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [isChooseModalOpen, setIsChooseModalOpen] = useState(false);
 
   // CSRF токен
   const csrfToken = useCsrfToken();
+
+  // Функция для обработки создания нового проекта
+  const handleProjectCreated = (projectId: string) => {
+    
+    fetch(`/api/projects/${projectId}/get/`, {
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Ошибка при получении данных проекта');
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Добавляем новый проект в конец списка
+        const newProject = {
+          id: projectId,
+          name: data.title,
+          isActive: false
+        };
+        
+        setProjects(prevProjects => [...prevProjects, newProject]);
+        
+        // Активируем новый проект
+        handleProjectClick(projectId);
+      })
+      .catch(error => {
+        console.error('Ошибка при получении данных нового проекта:', error);
+      });
+  };
 
   const fetchProjects = async () => {
     if (projectsLoadedRef.current && projects.length > 0) {
@@ -59,7 +95,6 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
 
       try {
         const data = await response.json();
-        console.log('Полученные данные:', data);
 
         if (!data.projects || !Array.isArray(data.projects)) {
           console.error('Некорректный формат данных:', data);
@@ -78,7 +113,7 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
           isActive: project.id.toString() === activeProjectId
         }));
 
-        setProjects(projectsList);
+        setProjects(projectsList.reverse());
 
         projectsLoadedRef.current = true;
 
@@ -135,8 +170,6 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
   }, [isAuthenticated, onProjectChange]);
 
   const handleProjectClick = (projectId: string) => {
-    console.log('Активация проекта с ID:', projectId);
-
     localStorage.setItem('activeProjectId', projectId);
 
     if (onProjectChange) {
@@ -153,82 +186,14 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
     });
   };
 
-  const handleAddProject = async () => {
-    try {
-      const newProjectTitle = `Проект ${projects.length + 1}`;
-
-      const tempId = `temp-${Date.now()}`;
-      const tempProject = {
-        id: tempId,
-        name: newProjectTitle,
-        isActive: false
-      };
-
-      const updatedProjects = [...projects, tempProject];
-      setProjects(updatedProjects);
-
-      const response = await fetch('/api/projects/save/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Csrftoken': csrfToken
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          title: newProjectTitle
-        })
-      });
-
-      console.log('Статус ответа сервера:', response.status);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Данные с сервера:', data);
-
-        if (!data.project || !data.project.id) {
-          console.error('Сервер вернул некорректные данные:', data);
-          setProjects(prevProjects => prevProjects.filter(p => p.id !== tempId));
-          return;
-        }
-
-        // реальный ID проекта с сервера
-        const realId = data.project.id.toString();
-        console.log(`Заменяем временный ID ${tempId} на реальный ID ${realId}`);
-
-        setProjects(prevProjects => {
-          const newProjects = prevProjects.map(project =>
-            project.id === tempId
-              ? { ...project, id: realId }
-              : project
-          );
-          console.log('Обновленный список проектов с реальным ID:', newProjects);
-          return newProjects;
-        });
-
-        console.log('Активируем проект с ID:', realId);
-        handleProjectClick(realId);
-
-        console.log('Проект успешно создан:', data.project);
-      } else {
-        console.error('Ошибка при создании проекта на сервере');
-        setProjects(prevProjects => prevProjects.filter(project => project.id !== tempId));
-        const errorText = await response.text();
-        console.error('Текст ошибки:', errorText);
-      }
-    } catch (error) {
-      console.error('Исключение при создании проекта:', error);
-      setProjects(prevProjects => prevProjects.filter(p =>
-        !p.id.startsWith('temp-') || p.id === `temp-${Date.now()}`
-      ));
-    }
-  };
-
   const handleCloseProject = async (projectId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     console.log('Запрос на удаление проекта с ID:', projectId);
 
+    // Устанавливаем ID проекта для удаления, что активирует панель подтверждения
     setDeletingProjectId(projectId);
 
+    // Прокручиваем к панели подтверждения, если она не видна
     setTimeout(() => {
       if (projectsContainerRef.current) {
         const container = projectsContainerRef.current;
@@ -247,8 +212,6 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
   };
 
   const confirmProjectDeletion = async (projectId: string) => {
-    console.log('Подтверждено удаление проекта с ID:', projectId);
-
     setDeletingProjectId(null);
 
     const currentProjects = [...projects];
@@ -295,7 +258,6 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
         const errorText = await response.text();
         console.error('Текст ошибки:', errorText);
       } else {
-
         localStorage.removeItem(`project_content_${projectId}`);
       }
     } catch (error) {
@@ -305,13 +267,13 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
   };
 
   const cancelProjectDeletion = () => {
+    console.log('Отмена удаления проекта');
     setDeletingProjectId(null);
   };
 
   const handleNameSubmit = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && editingProjectId) {
       e.preventDefault();
-      console.log('Переименование проекта с ID:', editingProjectId, 'на:', editingProjectName);
 
       const oldName = projects.find(p => p.id === editingProjectId)?.name || '';
       const currentProjects = [...projects];
@@ -435,17 +397,16 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
           <div className="projects-tabs" ref={projectsContainerRef}>
             {projects.length === 0 ? (
               <div className="no-projects-message">
-                У вас пока нет проектов. Нажмите "+" чтобы создать новый проект.
+                Проекты не найдены.
               </div>
             ) : (
-              <>
-                {projects.map(project => (
-                  <React.Fragment key={project.id}>
-                    <div
-                      className={`project-tab ${project.isActive ? 'active' : ''}`}
-                      onClick={() => handleProjectClick(project.id)}
-                      onDoubleClick={() => handleDoubleClick(project.id)}
-                    >
+              projects.map((project) => (
+                <React.Fragment key={project.id}>
+                  <div
+                    className={`project-tab ${project.isActive ? 'active' : ''}`}
+                    onClick={() => handleProjectClick(project.id)}
+                  >
+                    <div className="project-name">
                       {editingProjectId === project.id ? (
                         <input
                           type="text"
@@ -454,43 +415,47 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
                           onKeyDown={handleNameSubmit}
                           onBlur={() => setEditingProjectId(null)}
                           autoFocus
-                          className="project-name-input"
                         />
                       ) : (
-                        project.name
+                        <span onDoubleClick={() => handleDoubleClick(project.id)}>
+                          {project.name}
+                        </span>
                       )}
-                      <button
-                        className="close-tab"
-                        onClick={(e) => handleCloseProject(project.id, e)}
-                      >
-                        ×
-                      </button>
                     </div>
-                    {deletingProjectId === project.id && (
-                      <div className="delete-confirmation-tab">
-                        <span>Удалить проект?</span>
-                        <div className="delete-confirmation-buttons">
-                          <button
-                            className="confirm-delete-btn"
-                            onClick={() => confirmProjectDeletion(project.id)}
-                          >
-                            Да
-                          </button>
-                          <button
-                            className="cancel-delete-btn"
-                            onClick={cancelProjectDeletion}
-                          >
-                            Нет
-                          </button>
-                        </div>
+                    <button
+                      className="close-project-btn"
+                      onClick={(e) => handleCloseProject(project.id, e)}
+                      disabled={deletingProjectId === project.id}
+                    >
+                      {deletingProjectId === project.id ? '...' : '×'}
+                    </button>
+                  </div>
+                  
+                  {deletingProjectId === project.id && (
+                    <div className="delete-confirmation-tab">
+                      <span>Удалить проект?</span>
+                      <div className="delete-confirmation-buttons">
+                        <button
+                          className="confirm-delete-btn"
+                          onClick={() => confirmProjectDeletion(project.id)}
+                        >
+                          Да
+                        </button>
+                        <button
+                          className="cancel-delete-btn"
+                          onClick={cancelProjectDeletion}
+                        >
+                          Нет
+                        </button>
                       </div>
-                    )}
-                  </React.Fragment>
-                ))}
-              </>
+                    </div>
+                  )}
+                </React.Fragment>
+              ))
             )}
-            <button className="add-project-btn" onClick={handleAddProject}>
-              +
+            
+            <button className="add-project-btn" onClick={() => setIsChooseModalOpen(true)}>
+              <img src="/assets/add.svg" alt="Add" className="add-icon" />
             </button>
           </div>
 
@@ -503,6 +468,13 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
             </button>
           )}
         </>
+      )}
+      {isChooseModalOpen && (
+        <ChooseModal
+          isOpen={isChooseModalOpen}
+          onClose={() => setIsChooseModalOpen(false)}
+          onProjectCreated={handleProjectCreated}
+        />
       )}
     </div>
   );

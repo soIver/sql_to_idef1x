@@ -1,13 +1,14 @@
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
-from django.http import HttpResponseBadRequest
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from django_project.json2drawio import Visualizer
 from django_project.sql2json import sql_to_json_data
+from django_project.reverse import extract_sql_from_png
+from django_project.embedding import embed_metadata_to_png
+
 from .models import User, Project
 
 from rest_framework import status
@@ -16,10 +17,13 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from .serializers import UserSerializer
 
-import json, logging
+import json, logging, tempfile, os
+from PIL import Image, ImageDraw
+
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
+from django.http import FileResponse
 
 @api_view(['POST'])
 @ensure_csrf_cookie
@@ -295,3 +299,138 @@ def sql_to_drawio(request):
             'status': 'error',
             'message': 'Внутренняя ошибка сервера'
         }, status=500)
+
+@api_view(['POST'])
+@login_required
+def upload_file(request):
+    try:
+        file = request.FILES.get('file')
+        file_type = request.POST.get('type')
+        
+        if not file:
+            return Response({
+                'error': 'Файл не был загружен'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not file_type:
+            return Response({
+                'error': 'Тип файла не указан'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        project = Project(user=request.user)
+        
+        if file_type == 'sql':
+            sql_content = file.read().decode('utf-8')
+            project.title = file.name.replace('.sql', '')
+            project.sql_content = sql_content
+            project.save()
+            
+            return Response({
+                'status': 'success',
+                'projectId': project.id,
+                'message': 'SQL файл успешно загружен'
+            })
+            
+        elif file_type == 'png':
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                for chunk in file.chunks():
+                    temp_file.write(chunk)
+                temp_file_path = temp_file.name
+                
+            try:
+                sql_content = extract_sql_from_png(temp_file_path)
+                
+                project.title = file.name.replace('.png', '')
+                project.sql_content = sql_content
+                project.save()
+                
+                return Response({
+                    'status': 'success',
+                    'projectId': project.id,
+                    'message': 'PNG файл успешно обработан'
+                })
+            finally:
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+        else:
+            return Response({
+                'error': f'Неподдерживаемый тип файла: {file_type}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке файла: {str(e)}")
+        return Response({
+            'error': f'Ошибка при обработке файла: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@csrf_exempt
+@require_POST
+def export_png(request):
+    logger.info("Начало обработки запроса export_png")
+    logger.info(f"Метод запроса: {request.method}")
+    logger.info(f"Заголовки запроса: {request.headers}")
+    
+    try:
+        data = json.loads(request.body)
+        project_id = data.get('project_id')
+        sql_content = data.get('sql_content', '')
+        xml_content = data.get('xml_content', '')
+        
+        if not project_id:
+            return JsonResponse({'error': 'Необходим ID проекта'}, status=400)
+            
+        try:
+            project = Project.objects.get(id=project_id)
+            logger.info(f"Найден проект: {project.title}")
+        except Project.DoesNotExist:
+            logger.error(f"Проект с ID {project_id} не найден")
+            return JsonResponse({'error': 'Проект не найден'}, status=404)
+        
+        try:
+            
+            width, height = 1200, 800
+            image = Image.new('RGBA', (width, height), (255, 255, 255, 255))
+            draw = ImageDraw.Draw(image)
+            
+            draw.text((10, 10), f"Project: {project.title}", fill=(0, 0, 0, 255))
+            draw.text((10, 30), f"SQL Length: {len(sql_content)}", fill=(0, 0, 0, 255))
+            draw.text((10, 50), f"XML Length: {len(xml_content)}", fill=(0, 0, 0, 255))
+            
+            draw.line([(10, 70), (width - 10, 70)], fill=(0, 0, 0, 255), width=2)
+            
+            draw.text((width//2 - 100, height//2), "Diagram will be displayed here", fill=(0, 0, 0, 255))
+            
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            temp_file.close()
+            image.save(temp_file.name, format='PNG')
+            
+            logger.info("Начало встраивания метаданных в PNG")
+            logger.info(f"SQL контент для встраивания: {sql_content[:100]}")
+            logger.info(f"XML контент для встраивания: {xml_content[:100]}")
+            
+            png_with_metadata = embed_metadata_to_png(temp_file.name, sql_content, xml_content)
+            logger.info(f"Метаданные успешно встроены, создан файл: {png_with_metadata}")
+            
+            response = FileResponse(open(png_with_metadata, 'rb'), content_type='image/png')
+            response['Content-Disposition'] = f'attachment; filename="{project.title}.png"'
+            logger.info("Файл подготовлен для отправки")
+            
+            def cleanup(response):
+                import os
+                try:
+                    os.unlink(temp_file.name)
+                    os.unlink(png_with_metadata)
+                    logger.info(f"Временные файлы удалены: {temp_file.name}, {png_with_metadata}")
+                except Exception as e:
+                    logger.error(f"Ошибка при удалении временных файлов: {e}")
+                return response
+            
+            return cleanup(response)
+        
+        except Exception as file_error:
+            logger.error(f"Ошибка при создании PNG с метаданными: {str(file_error)}", exc_info=True)
+            return JsonResponse({'error': f'Ошибка при создании PNG файла: {str(file_error)}'}, status=500)
+            
+    except Exception as e:
+        logger.error(f"Ошибка при экспорте PNG: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)

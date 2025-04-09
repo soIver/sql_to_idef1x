@@ -59,11 +59,15 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'sql_to_drawio',
         'USER': 'postgres',
-        'PASSWORD': '12345',
-        'HOST': 'localhost',
+        'PASSWORD': '12345',  
+        'HOST': 'localhost',  
         'PORT': '5432',
+        'OPTIONS': {
+            'client_encoding': 'UTF8',  
+        }
     }
 }
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {

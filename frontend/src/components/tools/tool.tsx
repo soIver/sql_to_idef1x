@@ -7,14 +7,21 @@ interface ToolsMenuProps {
   isSaveDisabled?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
+  onExport?: () => void;
 }
 
-export default function ToolsMenu({ onSave, isSaveDisabled, onUndo, onRedo }: ToolsMenuProps) {
+export default function ToolsMenu({ onSave, isSaveDisabled, onUndo, onRedo, onExport }: ToolsMenuProps) {
   const csrfToken = useCsrfToken();
 
   const handleSave = () => {
     if (onSave && !isSaveDisabled) {
       onSave();
+    }
+  };
+
+  const handleExport = () => {
+    if (onExport) {
+      onExport();
     }
   };
 
@@ -36,7 +43,7 @@ export default function ToolsMenu({ onSave, isSaveDisabled, onUndo, onRedo }: To
       >
         <img src="/assets/save.png" alt="Save" />
       </button>
-      <button className="tool-button">
+      <button className="tool-button" onClick={handleExport}>
         <img src="/assets/export.png" alt="Export" />
       </button>
     </div>

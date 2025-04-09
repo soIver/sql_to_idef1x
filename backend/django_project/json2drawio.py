@@ -271,6 +271,10 @@ class Visualizer():
 
         return self.file.xml
 
+    def export(self):
+        # Устанавливаем белый фон для экспорта
+        return self.file.xml
+
 class Page(drawpyo.Page):
     def __init__(self, translator: Visualizer, file=None, **kwargs):
         super().__init__(file, **kwargs)
@@ -417,91 +421,47 @@ class Relation():
         self.label = label
 
     def implement(self, entities: dict[str, Entity], connection_points: tuple[tuple[float]], from_child: bool):
-        if from_child:
-            reference_entity_object = entities.get(self.referring_entity_name).object
-            referring_entity: Entity = entities.get(self.reference_entity_name)
-            reference_entity: Entity = entities.get(self.referring_entity_name)
+        # Определяем, какая сущность является зависимой (child)
+        child_entity = entities.get(self.referring_entity_name)  # referring_entity_name всегда зависимая
+        parent_entity = entities.get(self.reference_entity_name)  # reference_entity_name всегда независимая
+        
+        # Определяем относительное положение сущностей
+        dx = parent_entity.x - child_entity.x
+        dy = parent_entity.y - child_entity.y
+        
+        # Определяем новые точки подключения на основе относительного положения
+        if abs(dx) > abs(dy):
+            # Горизонтальное расположение
+            if dx > 0:
+                # Родитель справа от ребенка
+                child_point = child_entity.get_available_connection_point('right')
+                parent_point = parent_entity.get_available_connection_point('left')
+            else:
+                # Родитель слева от ребенка
+                child_point = child_entity.get_available_connection_point('right')
+                parent_point = parent_entity.get_available_connection_point('left')
         else:
-            reference_entity_object = entities.get(self.reference_entity_name).object
-            referring_entity: Entity = entities.get(self.referring_entity_name)
-            reference_entity: Entity = entities.get(self.reference_entity_name)
-            
-        # Определяем, какой объект использовать для подключения
-        if connection_points[0][1] == 1 or connection_points[0][1] == 0:  # если точка сверху или снизу
-            referring_entity_object = referring_entity.label
-        else:
-            referring_entity_object = referring_entity.object
-
+            # Вертикальное расположение
+            if dy > 0:
+                # Родитель ниже ребенка
+                child_point = child_entity.get_available_connection_point('bottom')
+                parent_point = parent_entity.get_available_connection_point('top')
+            else:
+                # Родитель выше ребенка
+                child_point = child_entity.get_available_connection_point('top')
+                parent_point = parent_entity.get_available_connection_point('bottom')
+        
+        # Если не удалось получить точки подключения, используем исходные
+        if child_point is None or parent_point is None:
+            child_point = connection_points[0]
+            parent_point = connection_points[1]
+        
+        # Определяем, должна ли связь быть пунктирной
         dashed = True
-        not_dashed_cnt = 0
-        for column in entities.get(self.referring_entity_name).columns:
-            if column.get('name') == self.referring_column_name:
-                not_dashed_cnt += 1
+        for column in child_entity.columns:
+            if column.get('name') == self.referring_column_name and column.get('primary'):
+                dashed = False
                 break
-        for column in entities.get(self.reference_entity_name).columns:
-            if column.get('name') == self.referring_column_name:
-                not_dashed_cnt += 1
-                break
-        if not_dashed_cnt == 2:
-            dashed = False
-            
-        # Проверяем вертикальное и горизонтальное расположение сущностей
-        # для определения правильных точек подключения
-        source_entity = referring_entity
-        target_entity = reference_entity
         
-        # Получаем размеры объектов (высота и ширина сущностей)
-        source_height = source_entity.height
-        source_width = source_entity.width
-        target_height = target_entity.height
-        target_width = target_entity.width
-        
-        # Определяем реальные координаты с учетом размеров
-        source_bottom = source_entity.y + source_height
-        source_right = source_entity.x + source_width
-        target_bottom = target_entity.y + target_height
-        target_right = target_entity.x + target_width
-        
-        # Вертикальное сравнение (учитываем высоту сущностей)
-        if source_entity.y > target_bottom:
-            # Источник ниже цели (с учетом высоты цели)
-            # Подключаем к нижней точке верхней сущности и верхней точке нижней
-            if connection_points[1][1] == 0:  # Если верхняя точка, меняем на нижнюю
-                # Сбрасываем предыдущую занятую точку
-                target_entity.sides['top'] = False
-                # Получаем новую точку подключения
-                new_point = target_entity.get_available_connection_point('bottom')
-                if new_point:
-                    connection_points = (connection_points[0], new_point)
-        elif target_entity.y > source_bottom:
-            # Цель ниже источника (с учетом высоты источника)
-            # Подключаем к нижней точке верхней сущности и верхней точке нижней
-            if connection_points[0][1] == 0:  # Если верхняя точка, меняем на нижнюю
-                # Сбрасываем предыдущую занятую точку
-                source_entity.sides['top'] = False
-                # Получаем новую точку подключения
-                new_point = source_entity.get_available_connection_point('bottom')
-                if new_point:
-                    connection_points = (new_point, connection_points[1])
-        
-        # Горизонтальное сравнение (учитываем ширину сущностей)
-        elif source_entity.x > target_right:
-            # Источник правее цели (с учетом ширины цели)
-            # Подключаем к правой точке левой сущности и левой точке правой
-            if connection_points[1][0] == 1:  # Если правая точка, меняем на левую
-                # Заменяем занятую точку
-                # (здесь сложнее, так как точек может быть несколько)
-                # Пытаемся найти новую точку подключения
-                new_point = target_entity.get_available_connection_point('right')
-                if new_point:
-                    connection_points = (connection_points[0], new_point)
-        elif target_entity.x > source_right:
-            # Цель правее источника (с учетом ширины источника)
-            # Подключаем к правой точке левой сущности и левой точке правой
-            if connection_points[0][0] == 1:  # Если правая точка, меняем на левую
-                # Заменяем занятую точку
-                new_point = source_entity.get_available_connection_point('right')
-                if new_point:
-                    connection_points = (new_point, connection_points[1])
-             
-        self.object = self.page.add_edge(referring_entity_object, reference_entity_object, self.label, dashed, connection_points)
+        # Создаем связь от зависимой сущности к независимой
+        self.object = self.page.add_edge(parent_entity.object, child_entity.object, self.label, dashed, (parent_point, child_point))

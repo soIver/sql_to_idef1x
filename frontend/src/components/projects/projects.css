@@ -1,7 +1,7 @@
 .projects-container {
     position: relative;
     width: 100%;
-    max-width: 100%;
+    max-width: 98%;
     overflow: hidden;
 }
 
@@ -18,8 +18,8 @@
     height: 100%;
     overflow: hidden;
     scroll-behavior: smooth;
-    border-top-left-radius: 25px;
-    border-top-right-radius: 25px;
+    border-top-left-radius: 1.5rem;
+    border-top-right-radius: 1.5rem;
     width: 100%;
     max-width: 100%;
 }
@@ -50,35 +50,56 @@
     background: #f0f0f0;
 }
 
-.close-tab {
-    margin-left: 8px;
-    background: none;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    padding: 0;
-    font-size: 14px;
-}
-
-.close-tab:hover {
-    color: #000;
-}
-
 .add-project-btn {
     background: #ffffff;
     color: #000000;
     border: none;
-    padding: 0 15px;
+    padding: 0.5rem;
+    padding-right: 0.7rem;
     cursor: pointer;
     display: flex;
     align-items: center;
-    font-size: 16px;
+    justify-content: center;
     flex-shrink: 0;
-    border-top-right-radius: 25px;
+    border-top-right-radius: 1.5rem;
 }
 
 .add-project-btn:hover {
     background: #f0f0f0;
+}
+
+.add-icon {
+    width: 0.8rem;
+    height: 1rem;
+}
+
+.project-name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.close-project-btn {
+    margin-left: 0.7rem;
+    background: none;
+    font-size: 1.2rem;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-project-btn:hover {
+    color: #000;
+}
+
+.close-project-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 .scroll-arrow {
@@ -130,11 +151,12 @@
     justify-content: center;
     width: 100%;
     height: 100%;
-    padding: 0 15px;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    font-size: 0.9rem;
     white-space: nowrap;
     background: #ffffff;
-    border-top-left-radius: 25px;
-    border-top-right-radius: 25px;
+    border-top-left-radius: 1.5rem;
 }
 
 .projects-loading {

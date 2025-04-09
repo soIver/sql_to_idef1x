@@ -1,0 +1,224 @@
+/* Основные стили модалки */
+.choose-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+  
+.choose-modal-content {
+    width: 56rem;
+    height: 36rem;
+    background-color: white;
+    border-radius: 25px;
+    padding: 40px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+  
+/* Строка с кнопками */
+.choose-modal-buttons-row {
+    display: flex;
+    justify-content: space-around;
+    gap: 1rem;
+    align-items: center;
+    flex: 1;
+}
+
+/* Стили кнопок */
+.choose-modal-action-btn {
+    width: 8rem;
+    height: 8rem;
+    border-radius: 1rem 0px 1rem 1rem;
+    cursor: pointer;
+    background-color: #06A8CC;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s ease;
+    z-index: 2;
+}
+  
+.choose-modal-action-btn:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(6, 168, 204, 0.4);
+}
+  
+.choose-btn-icon {
+    width: 3rem;
+    height: 3rem;
+    object-fit: contain;
+}
+  
+/* Остальные элементы */
+.choose-modal-close-btn {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+}
+  
+.choose-close-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.choose-back-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+}
+
+.choose-upload-icon {
+    width: 4rem;
+    height: 4rem;
+    opacity: 0.7;
+}
+  
+.choose-modal-title {
+    margin-top: 2rem;
+    font-size: 2.5rem;
+    color: #333;
+    text-align: center;
+    font-family: 'Anybody', sans-serif;
+}
+
+.choose-button-with-panel {
+    display: flex;
+    position: relative; 
+    align-items: flex-start;
+}
+
+/* Панель справа от кнопки */
+.choose-button-panel {
+    width: 11rem;
+    height: 8rem;
+    background-color: #2C3E50;
+    border-radius: 1rem; 
+    margin-left: -35px;
+    padding-left: 40px;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 3px 3px 10px rgba(0,0,0,0.2);
+    z-index: 1; 
+    margin-top: -80px;
+    white-space: normal; 
+    word-wrap: break-word; 
+    overflow-wrap: break-word;
+    font-size: 1rem;
+    font-family: 'Anybody', sans-serif;
+}
+
+.button-with-side-panel {
+    display: flex;
+    align-items: flex-start; 
+    position: relative;
+}
+
+.button-top-text {
+    font-size: 2.2rem;
+    color: #333;
+    font-weight: bold;
+    text-align: left; 
+    white-space: nowrap;
+    font-family: 'Anybody', sans-serif;
+}
+
+.button-block-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    position: relative;
+}
+
+/* Стили для области загрузки файлов */
+.choose-upload-container {
+    margin-top: 20px;
+    padding: 20px;
+}
+
+.choose-drop-area {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    transition: all 0.3s ease;
+    background: #fafafa;
+}
+
+.choose-drop-area.dragging {
+    border-color: #007bff;
+    background: #f0f8ff;
+}
+
+.choose-drop-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.choose-drop-text {
+    font-size: 18px;
+    color: #333;
+    margin: 0;
+}
+
+.choose-file-type {
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+}
+
+.choose-file-button {
+    padding: 10px 20px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.3s ease;
+}
+
+.choose-file-button:hover {
+    background: #0056b3;
+}
+
+.choose-file-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.choose-error-message {
+    margin-top: 15px;
+    padding: 10px;
+    background: #fff3f3;
+    color: #dc3545;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.choose-modal-back-btn {
+    position: absolute;
+    top: 2rem;
+    left: 2rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+}
+
