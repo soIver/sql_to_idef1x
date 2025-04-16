@@ -156,19 +156,8 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
                 setLoading(true);
                 setShowLoadingMessage(true);
 
-                const response = await fetch('/assets/example.drawio');
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.text();
-
-                if (!data.includes('<mxfile')) {
-                    throw new Error('Invalid diagram file format');
-                }
-
-                setXml(data);
+                // Убираем загрузку example.drawio
+                setXml('');
                 setError(null);
             } catch (err) {
                 console.error('Error loading default diagram:', err);
@@ -195,6 +184,7 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
         // показываем загрузку и сбрасываем ошибку
         if (sqlContent !== lastProcessedSql && sqlContent.trim() !== '') {
             setLoading(true);
+            setShowLoadingMessage(true);
             setError(null);
 
             if (loadingTimerRef.current) {
@@ -241,167 +231,104 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
         setTimeout(restoreFocus, 10);
     };
 
-    const handleExport = () => {
-        console.log('Вызвана функция handleExport в VisualEditor');
-        if (drawioRef.current) {
-            console.log('drawioRef.current существует, вызываем exportDiagram');
+    const lastXmlRef = useRef(xml);
+    
+    // Обновляем ref при изменении xml
+    useEffect(() => {
+        lastXmlRef.current = xml;
+    }, [xml]);
 
-            // Сохраняем текущее XML перед экспортом
-            const currentXml = xml;
-            console.log('Текущее XML перед экспортом (длина):', currentXml.length);
+    const handleExport = useCallback(async (exportData?: {data: string, format: string}) => {
+        console.log('Начало процесса экспорта');
+        
+        // Сохраняем текущий XML
+        const currentXml = lastXmlRef.current;
+        window.lastExportedXml = currentXml;
 
-            // Сохраняем XML в глобальной переменной для использования в onExport
-            window.lastExportedXml = currentXml;
-
+        // Если данные экспорта получены
+        if (exportData?.data) {
             try {
-                localStorage.setItem('lastExportedDiagramXml', currentXml);
-                localStorage.setItem('lastExportTime', Date.now().toString());
-                console.log('XML сохранен в localStorage с отметкой времени:', Date.now());
+                // Получаем название проекта
+                const projectName = localStorage.getItem('activeProjectName') || 'diagram';
+                const fileName = `${projectName.replace(/[^a-zA-Z0-9а-яА-ЯёЁ\s_-]/g, '')
+                    .replace(/\s+/g, '_')
+                    .substring(0, 50)}_diagram.png`;
 
-                const checkXmlInterval = setInterval(() => {
-                    if (xml !== currentXml) {
-                        console.log('XML изменился! Восстанавливаем из lastExportedXml');
-                        setXml(currentXml);
-                    }
-                }, 50);
-
-                setTimeout(() => {
-                    clearInterval(checkXmlInterval);
-                }, 3000);
-
-                // вместо прямого экспорта PNG отправляем SQL и XML на сервер,
-                // который встроит их в PNG файл и вернет готовый файл для скачивания
-                const activeProjectId = localStorage.getItem('activeProjectId');
-
-                if (activeProjectId) {
-                    const sqlContentElement = document.querySelector('.monaco-editor');
-                    let sqlContent = '';
-
-                    if (sqlContentElement) {
-                        const monacoEditor = (window as any).monaco?.editor?.getEditors()[0];
-                        if (monacoEditor) {
-                            sqlContent = monacoEditor.getValue() || '';
-                        } else {
-                            const textarea = sqlContentElement.querySelector('textarea');
-                            if (textarea) {
-                                sqlContent = textarea.value || '';
-                            }
-                        }
-                    }
-                    if (!sqlContent) {
-                        sqlContent = localStorage.getItem('lastSqlContent') || '';
-                    }
-
-                    // CSRF из печенек
-                    const getCookie = (name: string): string => {
-                        const value = `; ${document.cookie}`;
-                        const parts = value.split(`; ${name}=`);
-                        if (parts.length === 2) {
-                            const part = parts.pop();
-                            if (part) return part.split(';').shift() || '';
-                        }
-                        return '';
-                    };
-
-                    const csrfToken = getCookie('csrftoken');
-
-                    const requestData = {
-                        project_id: activeProjectId,
-                        sql_content: sqlContent,
-                        xml_content: currentXml
-                    };
-
-                    console.log('Подготовлены данные для отправки:', {
-                        project_id: activeProjectId,
-                        sql_length: sqlContent.length,
-                        xml_length: currentXml.length
-                    });
-
-                    fetch('/api/projects/export-png/', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrfToken
-                        },
-                        body: JSON.stringify(requestData)
-                    })
-                        .then(response => {
-                            console.log('Получен ответ от сервера:', {
-                                status: response.status,
-                                statusText: response.statusText,
-                                headers: Object.fromEntries(response.headers.entries())
-                            });
-
-                            if (!response.ok) {
-                                throw new Error(`HTTP error! status: ${response.status}`);
-                            }
-                            return response.blob();
-                        })
-                        .then(blob => {
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `diagram_${activeProjectId}.png`;
-                            document.body.appendChild(a);
-                            a.click();
-                            URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
-                            console.log('Файл успешно экспортирован с метаданными');
-
-                            setTimeout(() => {
-                                if (xml !== currentXml) {
-                                    console.log('Обнаружено изменение XML, восстанавливаем предыдущее состояние');
-                                    setXml(currentXml);
-                                }
-                            }, 100);
-                        })
-                        .catch(error => {
-                            console.error('Ошибка при экспорте PNG с метаданными:', error);
-                            console.error('Детали ошибки:', {
-                                message: error.message,
-                                stack: error.stack
-                            });
-
-                            // если что-то пошло не так, используем обычный экспорт без метаданных
-                            console.log('Переключаемся на стандартный экспорт');
-                            localStorage.setItem('pendingExport', 'true');
-                            drawioRef.current?.exportDiagram({
-                                format: 'png',
-                                background: '#ffffff'
-                            });
-
-                            setTimeout(() => {
-                                if (xml !== currentXml) {
-                                    console.log('Обнаружено изменение XML, восстанавливаем предыдущее состояние');
-                                    setXml(currentXml);
-                                }
-                            }, 100);
-                        });
-                } else {
-                    localStorage.setItem('pendingExport', 'true');
-                    drawioRef.current?.exportDiagram({
-                        format: 'png',
-                        background: '#ffffff'
-                    });
+                // Обработка данных изображения
+                const base64Data = exportData.data.split(',')[1];
+                const byteCharacters = atob(base64Data);
+                const byteArray = new Uint8Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteArray[i] = byteCharacters.charCodeAt(i);
                 }
-            } catch (e) {
-                console.error('Ошибка при экспорте:', e);
-                localStorage.setItem('pendingExport', 'true');
+                const blob = new Blob([byteArray], { type: 'image/png' });
+
+                // Создаем и скачиваем файл
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Очистка
+                setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                }, 100);
+
+                console.log('Экспорт завершен успешно');
+                
+                // Восстанавливаем XML через обновление состояния
+                setTimeout(() => {
+                    setXml(currentXml);
+                }, 100);
+                
+                return true;
+            } catch (error) {
+                console.error('Ошибка экспорта:', error);
+                setXml(currentXml);
+                return false;
+            }
+        }
+
+        // Если экспорт инициирован извне
+        if (!drawioRef.current) {
+            console.error('Ссылка на DrawIO недоступна');
+            return false;
+        }
+
+        try {
+            return new Promise<boolean>((resolve) => {
+                const handleMessage = (event: MessageEvent) => {
+                    if (event.data?.event === 'export') {
+                        window.removeEventListener('message', handleMessage);
+                        handleExport(event.data)
+                            .then(resolve)
+                            .catch(() => resolve(false));
+                    }
+                };
+
+                window.addEventListener('message', handleMessage);
+
                 drawioRef.current.exportDiagram({
                     format: 'png',
-                    background: '#ffffff'
+                    background: '#ffffff',
                 });
-
-                setTimeout(() => {
-                    if (xml !== currentXml) {
-                        setXml(currentXml);
-                    }
-                }, 100);
-            }
-        } else {
-            console.log('drawioRef.current не существует');
+            });
+        } catch (error) {
+            console.error('Ошибка инициализации экспорта:', error);
+            return false;
         }
-    };
+    }, [xml]);
+
+    const handleOnExport = useCallback((data: {data: string, format: string}) => {
+        console.log('Обработка события экспорта из DrawIO');
+        if (data?.data) {
+            handleExport(data);
+        }
+    }, [handleExport]);
+
 
     useImperativeHandle(ref, () => ({
         exportDiagram: handleExport
@@ -465,58 +392,7 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
                         setTimeout(restoreFocus, 10);
                     }}
                     onSave={handleSave}
-                    onExport={(data) => {
-                        console.log('Получены данные экспорта:', data);
-                        console.log('Тип данных:', typeof data.data);
-                        console.log('Начало данных:', typeof data.data === 'string' ? data.data.substring(0, 50) : 'Не строка');
-
-                        const isPendingExport = localStorage.getItem('pendingExport') === 'true';
-                        if (isPendingExport && window.lastExportedXml) {
-                            console.log('Обнаружен отложенный экспорт, восстанавливаем XML');
-                            setTimeout(() => {
-                                setXml(window.lastExportedXml || '');
-                                localStorage.removeItem('pendingExport');
-                            }, 0);
-                        }
-
-                        if (data && data.data) {
-                            try {
-                                if (typeof data.data === 'string' && data.data.startsWith('data:')) {
-                                    const a = document.createElement('a');
-                                    a.href = data.data;
-                                    a.download = 'diagram.png';
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    console.log('Файл успешно сохранен через простой метод');
-
-                                    if (!isPendingExport && window.lastExportedXml) {
-                                        setTimeout(() => {
-                                            setXml(window.lastExportedXml || '');
-                                        }, 0);
-                                    }
-                                    return;
-                                }
-
-                            } catch (error) {
-                                console.error('Ошибка при сохранении файла:', error);
-
-                                if (!isPendingExport && window.lastExportedXml) {
-                                    setTimeout(() => {
-                                        setXml(window.lastExportedXml || '');
-                                    }, 0);
-                                }
-                            }
-                        } else {
-                            console.error('Нет данных для экспорта');
-
-                            if (!isPendingExport && window.lastExportedXml) {
-                                setTimeout(() => {
-                                    setXml(window.lastExportedXml || '');
-                                }, 0);
-                            }
-                        }
-                    }}
+                    onExport={handleOnExport}
                 />
             </div>
         </div>

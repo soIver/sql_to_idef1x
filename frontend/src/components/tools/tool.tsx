@@ -4,18 +4,40 @@ import { useCsrfToken } from '../../hooks/useCsrfToken';
 
 interface ToolsMenuProps {
   onSave?: () => void;
-  isSaveDisabled?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
+  canSave?: boolean;
+  canUndo?: boolean;
+  canRedo?: boolean;
   onExport?: () => void;
 }
 
-export default function ToolsMenu({ onSave, isSaveDisabled, onUndo, onRedo, onExport }: ToolsMenuProps) {
+export default function ToolsMenu({ 
+  onSave, 
+  onUndo, 
+  onRedo, 
+  canSave, 
+  canUndo = false,
+  canRedo = false, 
+  onExport 
+}: ToolsMenuProps) {
   const csrfToken = useCsrfToken();
 
   const handleSave = () => {
-    if (onSave && !isSaveDisabled) {
+    if (onSave && canSave) {
       onSave();
+    }
+  };
+
+  const handleUndo = () => {
+    if (onUndo && canUndo) {
+      onUndo();
+    }
+  };
+
+  const handleRedo = () => {
+    if (onRedo && canRedo) {
+      onRedo();
     }
   };
 
@@ -27,19 +49,27 @@ export default function ToolsMenu({ onSave, isSaveDisabled, onUndo, onRedo, onEx
 
   return (
     <div className="tools">
-      <button className="tool-button" onClick={onUndo}>
+      <button 
+        className={`tool-button ${!canUndo ? 'disabled' : ''}`} 
+        onClick={handleUndo}
+        disabled={!canUndo}
+      >
         <img src="/assets/undo.png" alt="Undo" />
       </button>
-      <button className="tool-button" onClick={onRedo}>
+      <button 
+        className={`tool-button ${!canRedo ? 'disabled' : ''}`} 
+        onClick={handleRedo}
+        disabled={!canRedo}
+      >
         <img src="/assets/redo.png" alt="Redo" />
       </button>
       <button className="menubtn">
         <img src="/assets/menu.png" alt="menu" />
       </button>
       <button 
-        className={`tool-button ${isSaveDisabled ? 'disabled' : ''}`} 
+        className={`tool-button ${!canSave ? 'disabled' : ''}`} 
         onClick={handleSave}
-        disabled={isSaveDisabled}
+        disabled={!canSave}
       >
         <img src="/assets/save.png" alt="Save" />
       </button>

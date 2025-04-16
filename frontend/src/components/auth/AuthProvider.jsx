@@ -52,8 +52,6 @@ export function AuthProvider({ children }) {
 
     const logout = async () => {
         try {
-            console.log('Выполняем выход из системы...');
-
             // получаем новый CSRF токен если не передан
             let token = csrfToken;
             if (!token) {

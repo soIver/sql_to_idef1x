@@ -8,6 +8,7 @@ import ToolsMenu from './components/tools/tool.tsx';
 import Projects from './components/projects/projects.tsx';
 import { AuthProvider } from './components/auth/AuthProvider';
 import { useCsrfToken } from './hooks/useCsrfToken';
+import Notification from './components/notification/notification.tsx';
 
 function App() {
   const [activeModal, setActiveModal] = useState(null);
@@ -23,6 +24,8 @@ function App() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSavedContent, setLastSavedContent] = useState({});
   const visualEditorRef = useRef(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   const handleOpenModal = useCallback((type) => {
     if (activeModal && activeModal !== type) {
@@ -78,6 +81,15 @@ function App() {
           setSqlContent(localContent);
           if (sqlEditorRef.current) {
             sqlEditorRef.current.setValue(localContent);
+            
+            setTimeout(() => {
+              if (sqlEditorRef.current) {
+                console.log("Проверка undo/redo после загрузки проекта");
+                setCanUndo(sqlEditorRef.current.hasUndo());
+                setCanRedo(sqlEditorRef.current.hasRedo());
+                console.log(`Undo: ${sqlEditorRef.current.hasUndo()}, Redo: ${sqlEditorRef.current.hasRedo()}`);
+              }
+            }, 100);
           }
 
           const savedContent = lastSavedContent[projectId] || '';
@@ -87,6 +99,15 @@ function App() {
           setSqlContent(defaultSql);
           if (sqlEditorRef.current) {
             sqlEditorRef.current.setValue(defaultSql);
+            
+            setTimeout(() => {
+              if (sqlEditorRef.current) {
+                console.log("Проверка undo/redo после загрузки проекта");
+                setCanUndo(sqlEditorRef.current.hasUndo());
+                setCanRedo(sqlEditorRef.current.hasRedo());
+                console.log(`Undo: ${sqlEditorRef.current.hasUndo()}, Redo: ${sqlEditorRef.current.hasRedo()}`);
+              }
+            }, 100);
           }
           setHasUnsavedChanges(false);
         }
@@ -124,6 +145,13 @@ function App() {
 
       if (sqlEditorRef.current) {
         sqlEditorRef.current.setValue(content);
+        
+        setTimeout(() => {
+          if (sqlEditorRef.current) {
+            setCanUndo(sqlEditorRef.current.hasUndo());
+            setCanRedo(sqlEditorRef.current.hasRedo());
+          }
+        }, 100);
       }
 
       setTimeout(() => {
@@ -151,12 +179,34 @@ function App() {
         }
         setHasUnsavedChanges(false);
       }
+
+      if (sqlEditorRef.current) {
+        sqlEditorRef.current.setValue(localContent || defaultSql);
+        
+        // Также проверяем состояние undo/redo при обработке ошибок
+        setTimeout(() => {
+          if (sqlEditorRef.current) {
+            setCanUndo(sqlEditorRef.current.hasUndo());
+            setCanRedo(sqlEditorRef.current.hasRedo());
+          }
+        }, 100);
+      }
     }
   };
 
   const handleEditorChange = useCallback((value) => {
     if (value !== sqlContent) {
       setSqlContent(value);
+
+      // Обновляем состояние undo/redo после изменения контента
+      setTimeout(() => {
+        if (sqlEditorRef.current) {
+          const hasUndoNow = sqlEditorRef.current.hasUndo();
+          const hasRedoNow = sqlEditorRef.current.hasRedo();
+          setCanUndo(hasUndoNow);
+          setCanRedo(hasRedoNow);
+        }
+      }, 10);
 
       if (activeProjectId) {
         const localKey = `project_content_${activeProjectId}`;
@@ -183,11 +233,17 @@ function App() {
     try {
       setSavingStatus('saving');
 
+      // Получаем свежий CSRF токен из куки для предотвращения ошибок
+      const csrfCookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='));
+      const freshCsrfToken = csrfCookie ? csrfCookie.split('=')[1] : csrfToken;
+
       const response = await fetch(`/api/projects/${activeProjectId}/update/`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'X-Csrftoken': csrfToken
+          'X-Csrftoken': freshCsrfToken
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -197,7 +253,7 @@ function App() {
 
       if (response.ok) {
         setSavingStatus('success');
-        setTimeout(() => setSavingStatus(null), 2000);
+        setTimeout(() => setSavingStatus(null), 3000);
 
         if (activeProjectId) {
           const localKey = `project_content_${activeProjectId}`;
@@ -219,16 +275,23 @@ function App() {
     }
   };
 
-  // Функции Undo и Redo для редактора
   const handleUndo = () => {
     if (sqlEditorRef.current) {
       sqlEditorRef.current.undo();
+      setTimeout(() => {
+        setCanUndo(sqlEditorRef.current.hasUndo());
+        setCanRedo(sqlEditorRef.current.hasRedo());
+      }, 0);
     }
   };
-
+  
   const handleRedo = () => {
     if (sqlEditorRef.current) {
       sqlEditorRef.current.redo();
+      setTimeout(() => {
+        setCanUndo(sqlEditorRef.current.hasUndo());
+        setCanRedo(sqlEditorRef.current.hasRedo());
+      }, 0);
     }
   };
 
@@ -282,7 +345,6 @@ function App() {
   }, [handleCloseModal, handleOpenModal]);
 
   useEffect(() => {
-    // CSRF токен при загрузке приложения
     fetch('/api/csrf-token/', { credentials: 'include' });
 
     // активный проект из localStorage
@@ -319,18 +381,39 @@ function App() {
           isSwitching={switching}
         />
 
+        {savingStatus === 'saving' && (
+          <Notification 
+            message="Сохранение проекта..."
+            type="info"
+            onClose={() => {}}
+          />
+        )}
+        {savingStatus === 'success' && (
+          <Notification 
+            message="Проект сохранён!"
+            type="success"
+            onClose={() => setSavingStatus(null)}
+          />
+        )}
+        {savingStatus === 'error' && (
+          <Notification 
+            message="Ошибка сохранения"
+            type="error"
+            onClose={() => setSavingStatus(null)}
+          />
+        )}
+
         <div className="content-wrapper" ref={editorContainerRef}>
           <div className="menu-container">
             <ToolsMenu
               onSave={handleSave}
-              isSaveDisabled={!hasUnsavedChanges}
               onUndo={handleUndo}
               onRedo={handleRedo}
+              canSave={hasUnsavedChanges}
+              canUndo={canUndo}
+              canRedo={canRedo}
               onExport={handleExportPng}
             />
-            {savingStatus === 'saving' && <div className="saving-status">Сохранение проекта...</div>}
-            {savingStatus === 'success' && <div className="saving-status success">Проект сохранён!</div>}
-            {savingStatus === 'error' && <div className="saving-status error">Ошибка сохранения</div>}
           </div>
           <div className="editors-container">
             <div className="code-editor-container">

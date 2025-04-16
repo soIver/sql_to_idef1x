@@ -272,7 +272,6 @@ class Visualizer():
         return self.file.xml
 
     def export(self):
-        # Устанавливаем белый фон для экспорта
         return self.file.xml
 
 class Page(drawpyo.Page):
@@ -304,7 +303,6 @@ class Page(drawpyo.Page):
         if dashed:
             edge.pattern = 'dashed_small'
         
-        # Устанавливаем точки подключения
         edge.entryX = entries[0][0]
         edge.entryY = entries[0][1]
         edge.exitX = entries[1][0]

@@ -236,7 +236,8 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
       localStorage.removeItem('activeProjectId');
     }
 
-    const isTemporaryProject = projectId.startsWith('temp-');
+    // Проверяем, что projectId является строкой перед вызовом startsWith
+    const isTemporaryProject = typeof projectId === 'string' && projectId.startsWith('temp-');
 
     if (isTemporaryProject) {
       return;
@@ -285,7 +286,8 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
       ));
       setEditingProjectId(null);
 
-      const isTemporaryProject = editingProjectId.startsWith('temp-');
+      // Проверяем, что editingProjectId является строкой перед вызовом startsWith
+      const isTemporaryProject = typeof editingProjectId === 'string' && editingProjectId.startsWith('temp-');
       if (isTemporaryProject) {
         return;
       }
@@ -354,6 +356,27 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
       checkScroll();
 
       container.addEventListener('scroll', checkScroll);
+      
+      // Обработчик события колёсика мыши для горизонтальной прокрутки
+      const handleWheel = (e: WheelEvent) => {
+        // Если список проектов имеет горизонтальную прокрутку
+        if (container.scrollWidth > container.clientWidth) {
+          // Предотвращаем вертикальную прокрутку страницы, если нажата клавиша Shift
+          // или если контейнер может прокручиваться горизонтально
+          if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+            e.preventDefault();
+            // Используем deltaX, если оно есть, иначе используем deltaY
+            const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+            container.scrollLeft += delta;
+          } else {
+            // Если нажато колёсико без Shift и deltaY больше deltaX,
+            // то всё равно делаем горизонтальную прокрутку, но не блокируем вертикальную
+            container.scrollLeft += e.deltaY;
+          }
+        }
+      };
+      
+      container.addEventListener('wheel', handleWheel, { passive: false });
 
       const resizeObserver = new ResizeObserver(() => {
         checkScroll();
@@ -362,6 +385,7 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
 
       return () => {
         container.removeEventListener('scroll', checkScroll);
+        container.removeEventListener('wheel', handleWheel);
         resizeObserver.disconnect();
       };
     }

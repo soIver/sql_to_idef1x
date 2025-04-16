@@ -434,3 +434,82 @@ def export_png(request):
     except Exception as e:
         logger.error(f"Ошибка при экспорте PNG: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_POST
+def embed_metadata(request):
+    logger.info("Начало обработки запроса embed-metadata")
+    
+    try:
+        # Получаем параметры из запроса
+        png_file = request.FILES.get('png_file')
+        project_id = request.POST.get('project_id')
+        sql_content = request.POST.get('sql_content', '')
+        xml_content = request.POST.get('xml_content', '')
+        
+        logger.info(f"Получен PNG-файл размером {png_file.size if png_file else 0} байт")
+        logger.info(f"ID проекта: {project_id}")
+        logger.info(f"Длина SQL: {len(sql_content)}")
+        logger.info(f"Длина XML: {len(xml_content)}")
+        
+        if not png_file:
+            return JsonResponse({'error': 'PNG-файл не предоставлен'}, status=400)
+            
+        try:
+            # Сохраняем загруженный PNG во временный файл
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                for chunk in png_file.chunks():
+                    temp_file.write(chunk)
+                temp_file_path = temp_file.name
+                
+            logger.info(f"PNG-файл сохранен во временный файл: {temp_file_path}")
+            
+            # Встраиваем метаданные в PNG
+            logger.info("Начало встраивания метаданных в PNG")
+            png_with_metadata = embed_metadata_to_png(temp_file_path, sql_content, xml_content)
+            logger.info(f"Метаданные успешно встроены в файл: {png_with_metadata}")
+            
+            # Отправляем файл пользователю
+            response = FileResponse(open(png_with_metadata, 'rb'), content_type='image/png')
+            
+            # Определяем имя файла
+            try:
+                if project_id and project_id != 'unknown':
+                    project = Project.objects.get(id=project_id)
+                    filename = f"{project.title}.png"
+                else:
+                    filename = "diagram.png"
+            except Project.DoesNotExist:
+                filename = "diagram.png"
+                
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            logger.info(f"Файл подготовлен для отправки с именем: {filename}")
+            
+            # Функция для очистки временных файлов
+            def cleanup(response):
+                try:
+                    os.unlink(temp_file_path)
+                    os.unlink(png_with_metadata)
+                    logger.info(f"Временные файлы удалены: {temp_file_path}, {png_with_metadata}")
+                except Exception as e:
+                    logger.error(f"Ошибка при удалении временных файлов: {e}")
+                return response
+                
+            return cleanup(response)
+            
+        except Exception as process_error:
+            logger.error(f"Ошибка при обработке PNG-файла: {str(process_error)}", exc_info=True)
+            # Удаляем временные файлы в случае ошибки
+            try:
+                if 'temp_file_path' in locals():
+                    os.unlink(temp_file_path)
+                if 'png_with_metadata' in locals() and png_with_metadata:
+                    os.unlink(png_with_metadata)
+            except Exception as cleanup_error:
+                logger.error(f"Ошибка при очистке временных файлов: {str(cleanup_error)}")
+                
+            return JsonResponse({'error': f'Ошибка при обработке PNG-файла: {str(process_error)}'}, status=500)
+            
+    except Exception as e:
+        logger.error(f"Ошибка в обработчике embed-metadata: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)

@@ -21,7 +21,6 @@ export function useCsrfToken() {
         const cookieToken = getCsrfTokenFromCookies();
 
         if (cookieToken) {
-          console.log('CSRF токен получен из кук:', cookieToken.substring(0, 5) + '...');
           setCsrfToken(cookieToken);
           return;
         }
@@ -40,8 +39,14 @@ export function useCsrfToken() {
         }
 
         const data = await response.json();
-        console.log('Получен новый CSRF токен:', data.csrfToken.substring(0, 5) + '...');
         setCsrfToken(data.csrfToken);
+        
+        setTimeout(() => {
+          const updatedCookieToken = getCsrfTokenFromCookies();
+          if (updatedCookieToken && updatedCookieToken !== cookieToken) {
+            setCsrfToken(updatedCookieToken);
+          }
+        }, 500);
       } catch (error) {
         console.error('Ошибка при получении CSRF токена:', error);
       }
@@ -49,13 +54,33 @@ export function useCsrfToken() {
 
     fetchCsrfToken();
 
-    // обновление токена каждые 30 минут (я не знаю зачем сказали надо)
+    const handleUserActivity = () => {
+      const currentToken = getCsrfTokenFromCookies();
+      if (currentToken && currentToken !== csrfToken) {
+        setCsrfToken(currentToken);
+      }
+    };
+
+    document.addEventListener('click', handleUserActivity);
+    document.addEventListener('keydown', handleUserActivity);
+
     const intervalId = setInterval(fetchCsrfToken, 30 * 60 * 1000);
 
     return () => {
       clearInterval(intervalId);
+      document.removeEventListener('click', handleUserActivity);
+      document.removeEventListener('keydown', handleUserActivity);
     };
-  }, []);
+  }, [csrfToken]);
 
-  return csrfToken;
+  const getCurrentToken = (): string => {
+    const cookieToken = document.cookie
+      .split(';')
+      .map(cookie => cookie.trim())
+      .find(cookie => cookie.startsWith('csrftoken='));
+      
+    return cookieToken ? cookieToken.split('=')[1] : csrfToken;
+  };
+
+  return getCurrentToken();
 }

@@ -12,6 +12,8 @@ export interface SQLEditorRef {
   setValue: (value: string) => void;
   undo: () => void;
   redo: () => void;
+  hasUndo: () => boolean; 
+  hasRedo: () => boolean;
 }
 
 const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(({ initialValue = '', onChange }, ref) => {
@@ -39,9 +41,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(({ initialValue = '',
   }, [initialValue, isEditorReady]);
 
   useImperativeHandle(ref, () => ({
-    getValue: () => {
-      return editorInstance.current?.getValue() || '';
-    },
+    getValue: () => editorInstance.current?.getValue() || '',
     setValue: (value: string) => {
       if (editorInstance.current) {
         const currentValue = editorInstance.current.getValue();
@@ -50,11 +50,15 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(({ initialValue = '',
         }
       }
     },
-    undo: () => {
-      editorInstance.current?.trigger('keyboard', 'undo', null);
+    undo: () => editorInstance.current?.trigger('keyboard', 'undo', null),
+    redo: () => editorInstance.current?.trigger('keyboard', 'redo', null),
+    hasUndo: () => {
+      const model = editorInstance.current?.getModel();
+      return model ? (model as any).canUndo() : false;
     },
-    redo: () => {
-      editorInstance.current?.trigger('keyboard', 'redo', null);
+    hasRedo: () => {
+      const model = editorInstance.current?.getModel();
+      return model ? (model as any).canRedo() : false;
     }
   }), []);
 
@@ -79,14 +83,11 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(({ initialValue = '',
         accessibilitySupport: 'off'
       });
 
-      // обработчик изменений
       editorInstance.current.onDidChangeModelContent(() => {
-        if (onChangeRef.current) {
-          const value = editorInstance.current?.getValue() || '';
-          onChangeRef.current(value);
-        }
+        const value = editorInstance.current?.getValue() || '';
+        onChangeRef.current?.(value);
       });
-
+      
       setIsEditorReady(true);
     }
 
