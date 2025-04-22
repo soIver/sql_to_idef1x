@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import './choose.css';
 import { useCsrfToken } from '../../hooks/useCsrfToken';
@@ -15,7 +15,37 @@ const ChooseModal: React.FC<ChooseModalProps> = ({ isOpen, onClose, onProjectCre
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const csrfToken = useCsrfToken();
+
+
+    useEffect(() => {
+      const modal = modalRef.current;
+      const content = contentRef.current;
+
+      if (!modal || !content) return;
+
+      if (isOpen) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        requestAnimationFrame(() => {
+          modal.classList.add('active');
+          content.classList.add('active');
+        });
+      } else {
+        modal.classList.remove('active');
+        content.classList.remove('active');
+        const timer = setTimeout(() => {
+          if (modalRef.current) {
+            modalRef.current.style.display = 'none';
+            document.body.style.overflow = '';
+          }
+        }, 300); 
+        
+        return () => clearTimeout(timer);
+      }
+    }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -164,9 +194,15 @@ const ChooseModal: React.FC<ChooseModalProps> = ({ isOpen, onClose, onProjectCre
     }
   };
 
+  if (!isOpen && modalRef.current?.style.display === 'none') return null;
+
   return ReactDOM.createPortal(
-    <div className="choose-modal-overlay" onClick={onClose}>
-      <div className="choose-modal-content" onClick={e => e.stopPropagation()}>
+    <div className="choose-modal-overlay" 
+    ref={modalRef}
+    onClick={onClose}>
+      <div className="choose-modal-content" 
+      ref={contentRef}
+      onClick={e => e.stopPropagation()}>
         <button className="choose-modal-close-btn" onClick={onClose}>
           <img src="/assets/close.png" alt="Close" className="choose-close-icon" />
         </button>

@@ -16,7 +16,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'myapp',
+    'api',
     'corsheaders',
     'rest_framework',
 ]
@@ -30,8 +30,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'myapp.middleware.NoCacheMiddleware',
-    'myapp.middleware.AjaxMiddleware',
+    'api.middleware.NoCacheMiddleware',
+    'api.middleware.AjaxMiddleware',
 ]
 
 ROOT_URLCONF = 'django_project.urls'
@@ -135,4 +135,4 @@ CACHES = {
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 
-AUTH_USER_MODEL = 'myapp.User'
+AUTH_USER_MODEL = 'api.User'

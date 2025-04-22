@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import './modal.css';
 import { AuthContext } from '../auth/AuthProvider';
 import Notification from '../notification/notification';
 
-export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
+export default function Modal({ type, isOpen, onClose, onSwitchModal, isSwitching }) {
   const { checkAuth } = useContext(AuthContext);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [email, setEmail] = useState('');
@@ -11,14 +11,57 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [notification, setNotification] = useState(null);
+  const modalRef = useRef(null);
+  const contentRef = useRef(null);
 
-  // Пути к изображениям для слайдера
   const images = [
     '/assets/img1.png',
     '/assets/img2.png'
   ];
 
-  // Автопереключение слайдов
+  useEffect(() => {
+    const modal = modalRef.current;
+    const content = contentRef.current;
+  
+    if (!modal || !content) return;
+  
+    const handleTransitionEnd = () => {
+      if (!modal.classList.contains('active') && content.classList.contains('closing')) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+      }
+    };
+  
+    if (isOpen) {
+      // Открытие модалки
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      
+      // Удаляем класс закрытия
+      content.classList.remove('closing');
+      
+      // Сбрасываем стили перед анимацией
+      requestAnimationFrame(() => {
+        modal.classList.add('active');
+        content.classList.add('active');
+      });
+    } else {
+      // Добавляем класс закрытия перед началом анимации
+      content.classList.add('closing');
+      
+      // Запускаем анимацию закрытия
+      modal.classList.remove('active');
+      content.classList.remove('active');
+      
+      // Слушаем завершение анимации
+      content.addEventListener('transitionend', handleTransitionEnd);
+    }
+  
+    return () => {
+      content.removeEventListener('transitionend', handleTransitionEnd);
+    };
+  }, [isOpen]);
+  
   const startSlider = useCallback(() => {
     const interval = setInterval(() => {
       setCurrentIndex(prev => (prev + 1) % images.length);
@@ -26,7 +69,6 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
     return () => clearInterval(interval);
   }, [images.length]);
 
-  // Обработчики событий
   const resetSlider = () => setCurrentIndex(0);
 
   const handleClose = () => {
@@ -65,9 +107,6 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
       const csrfToken = csrfCookie ? csrfCookie.split('=')[1] : '';
 
       const endpoint = type === 'login' ? '/api/login/' : '/api/register/';
-      console.log('Отправка запроса на:', endpoint);
-      console.log('Отправляемые данные:', { email, password });
-
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -81,8 +120,6 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
           password2: confirmPassword
         })
       });
-
-      console.log('Статус ответа:', response.status);
 
       if (!response.ok) {
         let errorText;
@@ -110,15 +147,15 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
     }
   };
 
-  // Эффекты
   useEffect(() => {
-    if (!isOpen) return;
-    const cleanUp = startSlider();
-    window.history.pushState(null, '', `/${type}`);
-    return cleanUp;
+    if (isOpen) {
+      const cleanUp = startSlider();
+      window.history.pushState(null, '', `/${type}`);
+      return cleanUp;
+    }
   }, [isOpen, type, startSlider]);
 
-  if (!isOpen) return null;
+  if (!isOpen && modalRef.current?.style.display === 'none') return null;
 
   return (
     <>
@@ -129,9 +166,16 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
           onClose={() => setNotification(null)}
         />
       )}
-      <div className="modal active" onClick={handleClose}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          {/* Левая часть с слайдером */}
+      <div 
+        className="modal" 
+        ref={modalRef}
+        onClick={handleClose}
+      >
+        <div 
+          className="modal-content"
+          ref={contentRef}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="modal-left">
             <div className="slider-container">
               {images.map((src, index) => (
@@ -146,7 +190,6 @@ export default function Modal({ type, isOpen, onClose, onSwitchModal }) {
             <div className="modal-line"></div>
           </div>
 
-          {/* Правая часть с формой */}
           <div className="modal-right">
             <img
               src="/assets/close.png"

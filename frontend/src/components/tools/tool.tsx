@@ -12,14 +12,14 @@ interface ToolsMenuProps {
   onExport?: () => void;
 }
 
-export default function ToolsMenu({ 
-  onSave, 
-  onUndo, 
-  onRedo, 
-  canSave, 
+export default function ToolsMenu({
+  onSave,
+  onUndo,
+  onRedo,
+  canSave,
   canUndo = false,
-  canRedo = false, 
-  onExport 
+  canRedo = false,
+  onExport
 }: ToolsMenuProps) {
   const csrfToken = useCsrfToken();
 
@@ -49,15 +49,15 @@ export default function ToolsMenu({
 
   return (
     <div className="tools">
-      <button 
-        className={`tool-button ${!canUndo ? 'disabled' : ''}`} 
+      <button
+        className={`tool-button ${!canUndo ? 'disabled' : ''}`}
         onClick={handleUndo}
         disabled={!canUndo}
       >
         <img src="/assets/undo.png" alt="Undo" />
       </button>
-      <button 
-        className={`tool-button ${!canRedo ? 'disabled' : ''}`} 
+      <button
+        className={`tool-button ${!canRedo ? 'disabled' : ''}`}
         onClick={handleRedo}
         disabled={!canRedo}
       >
@@ -66,8 +66,8 @@ export default function ToolsMenu({
       <button className="menubtn">
         <img src="/assets/menu.png" alt="menu" />
       </button>
-      <button 
-        className={`tool-button ${!canSave ? 'disabled' : ''}`} 
+      <button
+        className={`tool-button ${!canSave ? 'disabled' : ''}`}
         onClick={handleSave}
         disabled={!canSave}
       >

@@ -1,3 +1,4 @@
 /backend/django_project/__pycache__/
-/backend/django_project/myapp/__pycache__/
+/backend/django_project/api/__pycache__/
 /backend/django_project/.env
+/.env

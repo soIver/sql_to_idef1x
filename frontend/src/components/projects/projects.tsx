@@ -171,6 +171,12 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
 
   const handleProjectClick = (projectId: string) => {
     localStorage.setItem('activeProjectId', projectId);
+    
+    // Сохраняем имя проекта в localStorage
+    const project = projects.find(p => p.id === projectId);
+    if (project && project.name) {
+      localStorage.setItem('activeProjectName', project.name);
+    }
 
     if (onProjectChange) {
       onProjectChange(projectId);
@@ -285,6 +291,12 @@ const Projects: React.FC<ProjectsProps> = ({ width = '100%', onProjectChange }) 
           : project
       ));
       setEditingProjectId(null);
+      
+      // Если это активный проект, обновляем имя в localStorage
+      const activeProjectId = localStorage.getItem('activeProjectId');
+      if (editingProjectId === activeProjectId) {
+        localStorage.setItem('activeProjectName', editingProjectName);
+      }
 
       // Проверяем, что editingProjectId является строкой перед вызовом startsWith
       const isTemporaryProject = typeof editingProjectId === 'string' && editingProjectId.startsWith('temp-');

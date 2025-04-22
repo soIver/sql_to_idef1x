@@ -25,6 +25,7 @@ interface DrawIoWindow extends Window {
 declare global {
     interface Window {
         lastExportedXml?: string;
+        lastExportedSql?: string;
     }
 }
 
@@ -232,38 +233,55 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
     };
 
     const lastXmlRef = useRef(xml);
+    const lastSqlRef = useRef(sqlContent);
     
-    // Обновляем ref при изменении xml
+    // Обновляем ref при изменении xml и sqlContent
     useEffect(() => {
         lastXmlRef.current = xml;
     }, [xml]);
+    
+    useEffect(() => {
+        lastSqlRef.current = sqlContent;
+    }, [sqlContent]);
 
     const handleExport = useCallback(async (exportData?: {data: string, format: string}) => {
-        console.log('Начало процесса экспорта');
         
-        // Сохраняем текущий XML
+        const projectId = localStorage.getItem('activeProjectId') || null;
+        const projectName = localStorage.getItem('activeProjectName') || 'diagram';
+        
         const currentXml = lastXmlRef.current;
+        const currentSql = lastSqlRef.current;
+        
         window.lastExportedXml = currentXml;
+        window.lastExportedSql = currentSql;
 
-        // Если данные экспорта получены
         if (exportData?.data) {
             try {
-                // Получаем название проекта
-                const projectName = localStorage.getItem('activeProjectName') || 'diagram';
                 const fileName = `${projectName.replace(/[^a-zA-Z0-9а-яА-ЯёЁ\s_-]/g, '')
                     .replace(/\s+/g, '_')
-                    .substring(0, 50)}_diagram.png`;
+                    .substring(0, 50)}.png`;
 
-                // Обработка данных изображения
-                const base64Data = exportData.data.split(',')[1];
-                const byteCharacters = atob(base64Data);
-                const byteArray = new Uint8Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {
-                    byteArray[i] = byteCharacters.charCodeAt(i);
+                
+                const response = await fetch('/api/convert/embed-sql-xml-to-png/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        png_data: exportData.data,
+                        sql_query: currentSql,
+                        xml_data: currentXml,
+                        project_name: projectName
+                    }),
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Ошибка при внедрении данных в PNG');
                 }
-                const blob = new Blob([byteArray], { type: 'image/png' });
-
-                // Создаем и скачиваем файл
+                
+                const blob = await response.blob();
+                
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -271,15 +289,12 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
                 document.body.appendChild(a);
                 a.click();
                 
-                // Очистка
                 setTimeout(() => {
                     URL.revokeObjectURL(url);
                     document.body.removeChild(a);
                 }, 100);
 
-                console.log('Экспорт завершен успешно');
                 
-                // Восстанавливаем XML через обновление состояния
                 setTimeout(() => {
                     setXml(currentXml);
                 }, 100);
@@ -292,9 +307,7 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
             }
         }
 
-        // Если экспорт инициирован извне
         if (!drawioRef.current) {
-            console.error('Ссылка на DrawIO недоступна');
             return false;
         }
 
@@ -311,7 +324,7 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
 
                 window.addEventListener('message', handleMessage);
 
-                drawioRef.current.exportDiagram({
+                drawioRef.current?.exportDiagram({
                     format: 'png',
                     background: '#ffffff',
                 });
@@ -320,10 +333,9 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
             console.error('Ошибка инициализации экспорта:', error);
             return false;
         }
-    }, [xml]);
+    }, [xml, sqlContent]);
 
     const handleOnExport = useCallback((data: {data: string, format: string}) => {
-        console.log('Обработка события экспорта из DrawIO');
         if (data?.data) {
             handleExport(data);
         }
@@ -366,10 +378,7 @@ const VisualEditor = forwardRef<VisualEditorRef, VisualEditorProps>(({ sqlConten
                         dark: false,
                         nav: false,
                         toolbar: false,
-                        chrome: false,
-                        saveAndExit: false,
-                        noSaveBtn: true,
-                        noExitBtn: true
+                        chrome: false
                     }}
                     configuration={{
                         editable: false,

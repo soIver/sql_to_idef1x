@@ -1,6 +1,6 @@
 import drawpyo, json
 from drawpyo.diagram import object_from_library as Node, Edge as Edge, TextFormat
-from .gptapi import get_ru_names
+from .translation import *
 
 from collections import defaultdict, deque
 
@@ -75,9 +75,11 @@ class Visualizer():
                     })
                 if len(data_for_translate[-1].get('foreign_keys')) == 0:
                     data_for_translate[-1].pop('foreign_keys')
-            translated_string: str = get_ru_names(data_for_translate).get('message')
-            translated_string = translated_string.replace('json', '').strip('```')
-            translated_data: list[dict[str, str | list[dict[str, str]]]] = json.loads(translated_string)
+
+            api_response = get_ru_names_gpt(data_for_translate)
+            print(api_response)
+
+            translated_data: list[dict[str, str | list[dict[str, str]]]] = json.loads(api_response)
             # меняем исходные имена на сгенерированные
             for i in range(len(data)):
                 data[i]['name_ru'] = translated_data[i].get('name_ru')
@@ -90,7 +92,6 @@ class Visualizer():
                 for k in range(len(foreign_keys)):
                     foreign_keys[k]['label_ru'] = foreign_keys_ru[k]['label_ru']
 
-        print(data)
         entity_names = []
         for entity_index, block in enumerate(data):
             # создание экземпляра отношения
@@ -268,10 +269,10 @@ class Visualizer():
                 
                 from_child = constraint_entities.get(constraint).index(center_entity_name) == 0
                 self.relations.get(constraint).implement(self.entities, (center_point, opposite_point), from_child)
-
         return self.file.xml
 
     def export(self):
+        pass
         return self.file.xml
 
 class Page(drawpyo.Page):

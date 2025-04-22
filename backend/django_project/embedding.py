@@ -1,46 +1,75 @@
-import tempfile
-import logging
+import logging, urllib.parse
+import io
+import datetime
 from PIL import Image, PngImagePlugin
 
 logger = logging.getLogger(__name__)
 
-def embed_metadata_to_png(png_path, sql_content, xml_content):
+def embed_metadata_to_png(png_blob: bytes, sql_content: str, xml_content: str) -> bytes:
+    """
+    Встраивает метаданные в PNG файл, переданный как бинарные данные
+    
+    Args:
+        png_blob: Бинарные данные PNG файла (bytes)
+        sql_content: SQL-запрос для встраивания
+        xml_content: XML-содержимое для встраивания
+    
+    Returns:
+        Бинарные данные PNG файла с внедренными метаданными
+    
+    Raises:
+        ValueError: Если входные данные некорректны
+        IOError: Если произошла ошибка обработки изображения
+    """
     try:
-        logger.info(f"Начало встраивания метаданных в файл {png_path}")
+        logger.info("Начало встраивания метаданных в PNG из blob-данных")
+        logger.info(f"Размер PNG данных: {len(png_blob)} байт")
         logger.info(f"Размер SQL: {len(sql_content)} символов")
         logger.info(f"Размер XML: {len(xml_content)} символов")
         
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-        temp_path = temp_file.name
-        temp_file.close()
-        
-        logger.info(f"Создан временный файл: {temp_path}")
-        
         try:
-            with Image.open(png_path) as img:
+            # Открываем изображение из blob-данных
+            with Image.open(io.BytesIO(png_blob)) as img:
                 logger.info(f"Исходное изображение открыто: {img.format}, размер {img.size}")
                 
+                # Проверяем, что это действительно PNG
+                if img.format != 'PNG':
+                    raise ValueError("Поддерживаются только PNG файлы")
+                
+                # Создаем метаданные
                 metadata = PngImagePlugin.PngInfo()
                 
-                if not sql_content:
-                    logger.warning("SQL контент пуст")
-                if not xml_content:
-                    logger.warning("XML контент пуст")
-                    
-                logger.info(f"SQL контент: {sql_content[:100]}")
-                logger.info(f"XML контент: {xml_content[:100]}")
+                # Валидация входных данных
+                if not isinstance(sql_content, str):
+                    raise ValueError("SQL контент должен быть строкой")
+                if not isinstance(xml_content, str):
+                    raise ValueError("XML контент должен быть строкой")
                 
-                metadata.add_text('sql_query', sql_content)
-                metadata.add_text('mxfile', xml_content)
+                if not sql_content.strip():
+                    logger.warning("SQL контент пуст или содержит только пробелы")
+                if not xml_content.strip():
+                    logger.warning("XML контент пуст или содержит только пробелы")
                 
-                img.save(temp_path, 'PNG', pnginfo=metadata)
-                logger.info(f"Изображение с метаданными сохранено в {temp_path}")
+                # Кодируем SQL и XML с помощью urllib.parse.quote
+                sql_encoded = urllib.parse.quote(sql_content)
+                xml_encoded = urllib.parse.quote(xml_content)
+                
+                # Добавляем закодированные метаданные
+                metadata.add_text('sql_query', sql_encoded)
+                metadata.add_text('mxfile', xml_encoded)
+                
+                # Сохраняем в буфер памяти
+                output = io.BytesIO()
+                img.save(output, 'PNG', pnginfo=metadata)
+                output.seek(0)
+                logger.info(f"Изображение с метаданными успешно сохранено в буфер")
+                
+                return output.getvalue()
                 
         except Exception as img_error:
             logger.error(f"Ошибка при обработке изображения: {str(img_error)}")
             raise
             
-        return temp_path
     except Exception as e:
-        logger.error(f"Ошибка при встраивании метаданных: {str(e)}")
-        raise 
+        logger.error(f"Критическая ошибка при встраивании метаданных: {str(e)}")
+        raise
